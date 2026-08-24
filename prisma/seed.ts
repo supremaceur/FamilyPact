@@ -385,7 +385,20 @@ const main = async (): Promise<void> => {
     });
 
     // --- Recompenses ----------------------------------------------------------
-    const cinema = await prisma.rewardRule.create({
+    // Palier deja obtenu, volontairement bas : il montre l'historique tout en
+    // laissant « Sortie cinema » comme prochaine recompense de Lucas.
+    const dessert = await prisma.rewardRule.create({
+      data: {
+        familyId: family.id,
+        childMembershipId: lucas.membershipId,
+        threshold: 200,
+        title: 'Choisir le dessert du week-end',
+        createdById: marie.membershipId,
+      },
+      select: { id: true },
+    });
+
+    await prisma.rewardRule.create({
       data: {
         familyId: family.id,
         childMembershipId: lucas.membershipId,
@@ -394,7 +407,6 @@ const main = async (): Promise<void> => {
         description: 'Un film au choix, popcorn compris.',
         createdById: marie.membershipId,
       },
-      select: { id: true },
     });
     await prisma.rewardRule.create({
       data: {
@@ -419,12 +431,12 @@ const main = async (): Promise<void> => {
     await prisma.rewardEvent.create({
       data: {
         familyId: family.id,
-        rewardRuleId: cinema.id,
+        rewardRuleId: dessert.id,
         childMembershipId: lucas.membershipId,
         status: RewardEventStatus.GRANTED,
-        titleSnapshot: 'Sortie cinema',
-        thresholdSnapshot: 500,
-        scoreAtProposal: 505,
+        titleSnapshot: 'Choisir le dessert du week-end',
+        thresholdSnapshot: 200,
+        scoreAtProposal: 205,
         proposedAt: new Date(Date.now() - 10 * 86_400_000),
         decidedAt: new Date(Date.now() - 9 * 86_400_000),
         decidedById: marie.membershipId,

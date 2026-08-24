@@ -62,3 +62,6 @@ yarn-error.log*
 # playwright
 /playwright-report
 /test-results
+
+# scratch local, jamais versionne
+/scripts/tmp

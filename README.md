@@ -125,8 +125,21 @@ le seed refuse de s'exécuter en production.
 | ------------------ | ---------------------------------------------------------- |
 | `npm run jobs:run` | Exécute les jobs une fois (idempotent par créneau horaire) |
 
-Les jobs sont également exposés en HTTP : `POST /api/jobs/run` avec l'en-tête
-`x-familipact-job-token`. Voir [docs/deployment.md](docs/deployment.md).
+Les jobs sont également exposés en HTTP sur `/api/jobs/run`, en `GET` comme en `POST`,
+avec `x-familipact-job-token` ou `Authorization: Bearer`. Sur Vercel, `CRON_SECRET` doit
+valoir exactement `JOB_RUNNER_TOKEN`. Voir [docs/deployment.md](docs/deployment.md).
+
+### Outils
+
+| Commande                                                       | Effet                                                                     |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `tsx --conditions=react-server scripts/capture-screenshots.ts` | Régénère les captures de la page d'accueil depuis le jeu de démonstration |
+| `tsx --conditions=react-server scripts/check-rest-surface.ts`  | Vérifie (et répare) la fermeture de la surface REST côté Supabase         |
+
+Les captures de `public/captures/` ne sont pas des maquettes : ce sont les pages réelles
+de l'application, rendues avec les données de la famille de démonstration, en thème clair
+et sombre. Le script exige un serveur de développement en cours d'exécution — la version
+de production pose un cookie `__Host-` que le navigateur refuse en HTTP.
 
 ---
 
