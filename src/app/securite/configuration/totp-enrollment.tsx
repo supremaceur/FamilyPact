@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { TextField } from '@/components/ui/field';
+import { QrCode } from '@/components/ui/qr-code';
 import { apiPost, apiPut } from '@/lib/api-client';
 import { useAction } from '@/lib/use-action';
 import { RecoveryCodeList } from '../codes-de-secours/recovery-code-list';
@@ -88,13 +89,12 @@ export const TotpEnrollment = ({ alreadyEnrolled }: { readonly alreadyEnrolled: 
 
       <div>
         <h2 className="text-sm font-semibold">1. Scannez ce QR code</h2>
-        <div
-          className="mt-3 w-fit rounded-[var(--radius-card)] border border-[var(--border-subtle)] bg-white p-3"
-          // Le SVG provient du serveur et n'inclut aucune donnee fournie par
-          // l'utilisateur : il encode l'URI otpauth generee cote serveur.
-          dangerouslySetInnerHTML={{ __html: challenge.qrCodeSvg }}
-          role="img"
-          aria-label="QR code de configuration de la double authentification"
+        {/* Le SVG provient du serveur et n'inclut aucune donnee fournie par
+            l'utilisateur : il encode l'URI otpauth generee cote serveur. */}
+        <QrCode
+          className="mt-3"
+          svg={challenge.qrCodeSvg}
+          label="QR code de configuration de la double authentification"
         />
         <button
           type="button"
