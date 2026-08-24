@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { PageBody } from '@/components/layout/page-body';
 import Link from 'next/link';
 import { LogoutButton } from '@/components/security/logout-button';
 import { PasskeyManager } from '@/components/security/passkey-manager';
@@ -34,7 +35,7 @@ const SecurityPage = async () => {
   ]);
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-6">
+    <PageBody largeur="lecture" className="flex flex-col gap-6">
       <Card>
         <CardHeader
           title="Double authentification"
@@ -112,7 +113,7 @@ const SecurityPage = async () => {
           </ul>
         </CardBody>
       </Card>
-    </div>
+    </PageBody>
   );
 };
 

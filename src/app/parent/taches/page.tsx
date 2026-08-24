@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { PageBody } from '@/components/layout/page-body';
 import Link from 'next/link';
 import { RECURRENCE_LABELS, WEEKDAY_SHORT_LABELS } from '@/domain/tasks';
 import { Avatar } from '@/components/ui/avatar';
@@ -30,7 +31,7 @@ const TasksPage = async () => {
   const canManage = hasCapability(actor, ParentPermission.TASK_MANAGE);
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <PageBody largeur="liste">
       <Card>
         <CardHeader
           title="Taches"
@@ -110,7 +111,7 @@ const TasksPage = async () => {
           )}
         </CardBody>
       </Card>
-    </div>
+    </PageBody>
   );
 };
 

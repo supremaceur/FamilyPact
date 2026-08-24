@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { SelectField, TextAreaField, TextField } from '@/components/ui/field';
+import { CheckboxGroup, SelectField, TextAreaField, TextField } from '@/components/ui/field';
 import { LIFT_CONDITION_LABELS } from '@/domain/rules-engine';
 import { apiPost } from '@/lib/api-client';
 import { useAction } from '@/lib/use-action';
@@ -21,6 +21,7 @@ export const RewardRuleForm = ({ children }: { readonly children: readonly Child
     threshold: 500,
     title: '',
     description: '',
+    revocable: false,
   });
 
   const submit = async (): Promise<void> => {
@@ -33,7 +34,7 @@ export const RewardRuleForm = ({ children }: { readonly children: readonly Child
       {
         successNotice: 'Palier cree.',
         onSuccess: () => {
-          setValues((current) => ({ ...current, title: '', description: '' }));
+          setValues((current) => ({ ...current, title: '', description: '', revocable: false }));
         },
       },
     );
@@ -82,6 +83,24 @@ export const RewardRuleForm = ({ children }: { readonly children: readonly Child
             ...current,
             threshold: Number.parseInt(event.target.value, 10) || 0,
           }));
+        }}
+      />
+      {/* La nature de la recompense ne se devine pas : un restaurant deja vecu
+          ne se reprend pas, du temps d'ecran si. C'est la famille qui tranche,
+          au moment ou elle cree le palier. Non coche par defaut. */}
+      <CheckboxGroup
+        legend="Nature de la recompense"
+        options={[
+          {
+            value: 'revocable',
+            label: 'Cette recompense dure dans le temps',
+            description:
+              "Temps d'ecran, permission hebdomadaire... Si le score repasse sous le palier, l'application vous le signalera et vous pourrez la retirer. Une recompense ponctuelle, elle, reste acquise.",
+          },
+        ]}
+        selected={values.revocable ? ['revocable'] : []}
+        onToggle={(_value, checked) => {
+          setValues((current) => ({ ...current, revocable: checked }));
         }}
       />
       <TextAreaField

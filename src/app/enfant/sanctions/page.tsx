@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { PageBody } from '@/components/layout/page-body';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ProgressBar } from '@/components/ui/progress';
@@ -13,7 +14,7 @@ const ChildSanctionsPage = async () => {
   const data = await getChildDashboard(actor);
 
   return (
-    <div className="mx-auto max-w-xl">
+    <PageBody largeur="liste">
       <Card>
         <CardHeader title="Sanctions en cours" />
         <CardBody className="pt-0">
@@ -66,7 +67,7 @@ const ChildSanctionsPage = async () => {
           )}
         </CardBody>
       </Card>
-    </div>
+    </PageBody>
   );
 };
 

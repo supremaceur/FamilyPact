@@ -177,8 +177,18 @@ src/
 
 ## Documentation
 
+Deux fichiers vivants, mis à jour au fil des évolutions :
+
+| Fichier                                | Rôle                                                                         |
+| -------------------------------------- | ---------------------------------------------------------------------------- |
+| [docs/ETAT.md](docs/ETAT.md)           | L'état du projet : ce qui est livré, en cours, cassé. **À lire en premier.** |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | Pourquoi les choix structurants ont été faits, et ce qu'ils coûtent          |
+
+Les documents ci-dessous sont des références, consultées au besoin :
+
 | Document                                         | Contenu                                                  |
 | ------------------------------------------------ | -------------------------------------------------------- |
+| [docs/interface.md](docs/interface.md)           | Palette, composants, mobile-first, accessibilité, ton    |
 | [docs/architecture.md](docs/architecture.md)     | Choix techniques, décisions et leurs justifications      |
 | [docs/data-model.md](docs/data-model.md)         | Schéma relationnel, contraintes, invariants              |
 | [docs/business-rules.md](docs/business-rules.md) | Règles métier, machines d'état, moteur de règles         |

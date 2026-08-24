@@ -57,6 +57,24 @@ export interface ChildDashboardData {
     readonly title: string;
     readonly threshold: number;
     readonly decidedAt: Date | null;
+    /**
+     * L'enfant voit lui aussi si la recompense peut lui etre retiree. Lui
+     * cacher la regle pour lui epargner l'inquietude reviendrait a lui faire une
+     * promesse qu'on n'est pas sur de tenir.
+     */
+    readonly revocable: boolean;
+  }[];
+  /**
+   * Recompenses retirees, avec le motif. Elles restent visibles : une decision
+   * qu'on ne peut pas relire n'est pas une decision consultable, et l'enfant a
+   * besoin de savoir pourquoi il a perdu quelque chose.
+   */
+  readonly revokedRewards: readonly {
+    readonly id: string;
+    readonly title: string;
+    readonly threshold: number;
+    readonly revokedAt: Date | null;
+    readonly reason: string | null;
   }[];
 }
 
@@ -170,6 +188,9 @@ export const getChildDashboard = async (actor: FamilyActor): Promise<ChildDashbo
           titleSnapshot: true,
           thresholdSnapshot: true,
           decidedAt: true,
+          revokedAt: true,
+          revocationReason: true,
+          rewardRule: { select: { revocable: true } },
         },
       }),
     ],
@@ -214,6 +235,16 @@ export const getChildDashboard = async (actor: FamilyActor): Promise<ChildDashbo
         title: event.titleSnapshot,
         threshold: event.thresholdSnapshot,
         decidedAt: event.decidedAt,
+        revocable: event.rewardRule.revocable,
+      })),
+    revokedRewards: rewardEvents
+      .filter((event) => event.status === RewardEventStatus.REVOKED)
+      .map((event) => ({
+        id: event.id,
+        title: event.titleSnapshot,
+        threshold: event.thresholdSnapshot,
+        revokedAt: event.revokedAt,
+        reason: event.revocationReason,
       })),
   };
 };

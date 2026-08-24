@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
+import { PageBody } from '@/components/layout/page-body';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { formatDateTime } from '@/lib/format';
 import { requireParentActor } from '@/server/auth/context';
-import { getLedgerHistory } from '@/server/queries/history';
+import { getFamilyTimeline } from '@/server/queries/history';
 import { listChildren } from '@/server/services/children';
 
 export const metadata: Metadata = { title: 'Historique' };
@@ -11,8 +12,16 @@ export const metadata: Metadata = { title: 'Historique' };
 const TYPE_LABELS: Record<string, string> = {
   TASK_APPROVED: 'Tache validee',
   TASK_MISSED: 'Tache non realisee',
+  TASK_REJECTED: 'Tache refusee — points retires',
   MANUAL_ADJUSTMENT: 'Ajustement manuel',
   REVERSAL: 'Annulation',
+};
+
+/** Decisions qui n'ecrivent rien au registre, et qui n'apparaissaient donc nulle part. */
+const DECISION_LABELS: Record<string, string> = {
+  TASK_REJECTED: 'Tache refusee — aucun point retire',
+  TASK_MISSED_IGNORED: 'Echeance depassee — ignoree',
+  REWARD_REVOKED: 'Recompense retiree — aucun point retire',
 };
 
 /**
@@ -29,8 +38,8 @@ const HistoryPage = async ({
 }) => {
   const actor = await requireParentActor();
   const { enfant, cursor } = await searchParams;
-  const [ledger, children] = await Promise.all([
-    getLedgerHistory(actor, { childMembershipId: enfant ?? null, cursor: cursor ?? null }),
+  const [timeline, children] = await Promise.all([
+    getFamilyTimeline(actor, { childMembershipId: enfant ?? null, cursor: cursor ?? null }),
     listChildren(actor),
   ]);
 
@@ -38,11 +47,11 @@ const HistoryPage = async ({
     childId === null ? '/parent/historique' : `/parent/historique?enfant=${childId}`;
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <PageBody largeur="liste">
       <Card>
         <CardHeader
-          title="Historique des points"
-          description={`Horaires affiches dans le fuseau de la famille (${actor.timeZone}).`}
+          title="Historique"
+          description={`Mouvements de points et decisions sans effet sur les points. Horaires affiches dans le fuseau de la famille (${actor.timeZone}).`}
         />
         <CardBody className="pt-0">
           <nav aria-label="Filtrer par enfant" className="mb-4 flex flex-wrap gap-2">
@@ -71,32 +80,49 @@ const HistoryPage = async ({
             ))}
           </nav>
 
-          {ledger.items.length === 0 ? (
-            <EmptyState title="Aucun mouvement pour ce filtre" />
+          {timeline.items.length === 0 ? (
+            <EmptyState title="Aucun evenement pour ce filtre" />
           ) : (
             <ul className="divide-y divide-[var(--border-subtle)]">
-              {ledger.items.map((row) => (
+              {timeline.items.map((row) => (
                 <li key={row.id} className="flex items-start gap-3 py-3">
-                  <span
-                    className={`tabular w-14 shrink-0 text-right text-sm font-semibold ${
-                      row.delta > 0
-                        ? 'text-leaf-700 dark:text-leaf-200'
-                        : 'text-clay-700 dark:text-clay-200'
-                    }`}
-                  >
-                    {row.delta > 0 ? '+' : '−'}
-                    {Math.abs(row.delta)}
-                  </span>
+                  {row.kind === 'POINTS' ? (
+                    <span
+                      className={`tabular w-14 shrink-0 text-right text-sm font-semibold ${
+                        row.delta > 0
+                          ? 'text-leaf-700 dark:text-leaf-200'
+                          : 'text-clay-700 dark:text-clay-200'
+                      }`}
+                    >
+                      {row.delta > 0 ? '+' : '\u2212'}
+                      {Math.abs(row.delta)}
+                    </span>
+                  ) : (
+                    // Colonne conservee, valeur neutre : la chronologie reste
+                    // alignee, et l'absence de mouvement se lit d'un coup d'oeil.
+                    <span
+                      className="w-14 shrink-0 text-right text-sm text-[var(--text-muted)]"
+                      aria-label="Aucun point retire ni accorde"
+                    >
+                      &mdash;
+                    </span>
+                  )}
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm">
-                      <span className="font-medium">{row.child.user.displayName}</span>
-                      {' — '}
-                      {row.label}
-                    </p>
+                    {row.kind === 'POINTS' ? (
+                      <p className="text-sm">
+                        <span className="font-medium">{row.childName}</span>
+                        {' \u2014 '}
+                        {row.label}
+                      </p>
+                    ) : (
+                      <p className="text-sm">{row.summary}</p>
+                    )}
                     <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-                      {formatDateTime(row.createdAt, actor.timeZone)} ·{' '}
-                      {TYPE_LABELS[row.type] ?? row.type}
-                      {row.approvedBy !== null && <> · par {row.approvedBy.user.displayName}</>}
+                      {formatDateTime(row.at, actor.timeZone)} ·{' '}
+                      {row.kind === 'POINTS'
+                        ? (TYPE_LABELS[row.type] ?? row.type)
+                        : (DECISION_LABELS[row.action] ?? row.action)}
+                      {row.actorName !== null && <> · par {row.actorName}</>}
                     </p>
                     {row.reason !== null && (
                       <p className="mt-1 text-xs text-[var(--text-secondary)]">
@@ -109,9 +135,9 @@ const HistoryPage = async ({
             </ul>
           )}
 
-          {ledger.nextCursor !== null && (
+          {timeline.nextCursor !== null && (
             <a
-              href={`/parent/historique?cursor=${ledger.nextCursor}${enfant !== undefined ? `&enfant=${enfant}` : ''}`}
+              href={`/parent/historique?cursor=${encodeURIComponent(timeline.nextCursor)}${enfant !== undefined ? `&enfant=${enfant}` : ''}`}
               className="text-pact-700 dark:text-pact-300 mt-4 inline-block text-sm font-medium underline underline-offset-4"
             >
               Voir plus ancien
@@ -119,7 +145,7 @@ const HistoryPage = async ({
           )}
         </CardBody>
       </Card>
-    </div>
+    </PageBody>
   );
 };
 

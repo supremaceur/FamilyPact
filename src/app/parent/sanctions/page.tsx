@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { DashboardColumn, DashboardGrid, PageBody } from '@/components/layout/page-body';
 import { ParentPermission, SanctionInstanceStatus } from '@/generated/prisma/enums';
 import { SanctionActivationCard } from '@/components/parent/sanction-activation-card';
 import { SanctionLiftCard } from '@/components/parent/sanction-lift-card';
@@ -40,7 +41,7 @@ const SanctionsPage = async () => {
   const canLift = hasCapability(actor, ParentPermission.SANCTION_LIFT);
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-6">
+    <PageBody largeur="tableauDeBord" className="flex flex-col gap-6">
       <Card className="border-amber-soft-200 bg-amber-soft-50 dark:border-amber-soft-700 dark:bg-amber-soft-900/20">
         <CardBody className="pt-5">
           <p className="text-amber-soft-900 dark:text-amber-soft-100 text-sm">
@@ -51,132 +52,139 @@ const SanctionsPage = async () => {
         </CardBody>
       </Card>
 
-      <Card>
-        <CardHeader
-          title="Sanctions proposees"
-          description="Un seuil a ete franchi. Rien n'est actif tant que vous n'avez pas decide."
-        />
-        <CardBody className="pt-0">
-          {proposed.length === 0 ? (
-            <EmptyState title="Aucune sanction proposee" />
-          ) : !canActivate ? (
-            <EmptyState
-              title={`${proposed.length} proposition${proposed.length > 1 ? 's' : ''} en attente`}
-              description="Vous n'avez pas la permission d'activer une sanction. Demandez-la au proprietaire de la famille."
+      <DashboardGrid>
+        <DashboardColumn>
+          {/* Le lisere ne s'allume que si une proposition attend une decision. */}
+          <Card tone={proposed.length > 0 ? 'lead' : 'default'}>
+            <CardHeader
+              title="Sanctions proposees"
+              description="Un seuil a ete franchi. Rien n'est actif tant que vous n'avez pas decide."
             />
-          ) : (
-            <ul>
-              {proposed.map((instance) => (
-                <SanctionActivationCard
-                  key={instance.id}
-                  instanceId={instance.id}
-                  title={instance.titleSnapshot}
-                  description={instance.descriptionSnapshot}
-                  child={{
-                    displayName: instance.child.user.displayName,
-                    avatarKey: instance.child.childProfile?.avatarKey ?? 'fox',
-                    colorKey: instance.child.childProfile?.colorKey ?? 'sage',
-                  }}
-                  threshold={instance.thresholdSnapshot}
-                  comparator={instance.comparatorSnapshot}
-                  scoreAtProposal={instance.scoreAtProposal}
-                  currentScore={instance.child.childProfile?.cachedBalance ?? 0}
-                  defaults={{
-                    liftConditionType: instance.sanctionRule.liftConditionType,
-                    liftScoreThreshold: instance.sanctionRule.liftScoreThreshold,
-                    liftDurationDays: instance.sanctionRule.liftDurationDays,
-                  }}
+            <CardBody className="pt-0">
+              {proposed.length === 0 ? (
+                <EmptyState title="Aucune sanction proposee" />
+              ) : !canActivate ? (
+                <EmptyState
+                  title={`${proposed.length} proposition${proposed.length > 1 ? 's' : ''} en attente`}
+                  description="Vous n'avez pas la permission d'activer une sanction. Demandez-la au proprietaire de la famille."
                 />
-              ))}
-            </ul>
-          )}
-        </CardBody>
-      </Card>
+              ) : (
+                <ul>
+                  {proposed.map((instance) => (
+                    <SanctionActivationCard
+                      key={instance.id}
+                      instanceId={instance.id}
+                      title={instance.titleSnapshot}
+                      description={instance.descriptionSnapshot}
+                      child={{
+                        displayName: instance.child.user.displayName,
+                        avatarKey: instance.child.childProfile?.avatarKey ?? 'fox',
+                        colorKey: instance.child.childProfile?.colorKey ?? 'sage',
+                      }}
+                      threshold={instance.thresholdSnapshot}
+                      comparator={instance.comparatorSnapshot}
+                      scoreAtProposal={instance.scoreAtProposal}
+                      currentScore={instance.child.childProfile?.cachedBalance ?? 0}
+                      defaults={{
+                        liftConditionType: instance.sanctionRule.liftConditionType,
+                        liftScoreThreshold: instance.sanctionRule.liftScoreThreshold,
+                        liftDurationDays: instance.sanctionRule.liftDurationDays,
+                      }}
+                    />
+                  ))}
+                </ul>
+              )}
+            </CardBody>
+          </Card>
 
-      <Card>
-        <CardHeader
-          title="Sanctions en cours"
-          description="Une condition atteinte ne leve rien : elle ouvre la possibilite de lever."
-        />
-        <CardBody className="pt-0">
-          {ongoing.length === 0 ? (
-            <EmptyState title="Aucune sanction active" />
-          ) : (
-            <ul>
-              {ongoing.map((instance) => (
-                <SanctionLiftCard
-                  key={instance.id}
-                  instanceId={instance.id}
-                  title={instance.titleSnapshot}
-                  description={instance.descriptionSnapshot}
-                  child={{
-                    displayName: instance.child.user.displayName,
-                    avatarKey: instance.child.childProfile?.avatarKey ?? 'fox',
-                    colorKey: instance.child.childProfile?.colorKey ?? 'sage',
-                  }}
-                  status={instance.status as 'ACTIVE' | 'LIFT_ELIGIBLE'}
-                  liftConditionType={instance.liftConditionType}
-                  liftAt={instance.liftAt?.toISOString() ?? null}
-                  liftScoreThreshold={instance.liftScoreThreshold}
-                  currentScore={instance.child.childProfile?.cachedBalance ?? 0}
-                  activatedAtLabel={
-                    instance.activatedAt !== null
-                      ? formatDate(instance.activatedAt, actor.timeZone)
-                      : null
-                  }
-                  liftAtLabel={
-                    instance.liftAt !== null
-                      ? formatDateTime(instance.liftAt, actor.timeZone)
-                      : null
-                  }
-                  canLift={canLift}
-                />
-              ))}
-            </ul>
-          )}
-        </CardBody>
-      </Card>
+          <Card>
+            <CardHeader
+              title="Sanctions en cours"
+              description="Une condition atteinte ne leve rien : elle ouvre la possibilite de lever."
+            />
+            <CardBody className="pt-0">
+              {ongoing.length === 0 ? (
+                <EmptyState title="Aucune sanction active" />
+              ) : (
+                <ul>
+                  {ongoing.map((instance) => (
+                    <SanctionLiftCard
+                      key={instance.id}
+                      instanceId={instance.id}
+                      title={instance.titleSnapshot}
+                      description={instance.descriptionSnapshot}
+                      child={{
+                        displayName: instance.child.user.displayName,
+                        avatarKey: instance.child.childProfile?.avatarKey ?? 'fox',
+                        colorKey: instance.child.childProfile?.colorKey ?? 'sage',
+                      }}
+                      status={instance.status as 'ACTIVE' | 'LIFT_ELIGIBLE'}
+                      liftConditionType={instance.liftConditionType}
+                      liftAt={instance.liftAt?.toISOString() ?? null}
+                      liftScoreThreshold={instance.liftScoreThreshold}
+                      currentScore={instance.child.childProfile?.cachedBalance ?? 0}
+                      activatedAtLabel={
+                        instance.activatedAt !== null
+                          ? formatDate(instance.activatedAt, actor.timeZone)
+                          : null
+                      }
+                      liftAtLabel={
+                        instance.liftAt !== null
+                          ? formatDateTime(instance.liftAt, actor.timeZone)
+                          : null
+                      }
+                      canLift={canLift}
+                    />
+                  ))}
+                </ul>
+              )}
+            </CardBody>
+          </Card>
+        </DashboardColumn>
 
-      <Card>
-        <CardHeader title="Historique des sanctions" />
-        <CardBody className="pt-0">
-          {past.length === 0 ? (
-            <EmptyState title="Aucune sanction terminee" />
-          ) : (
-            <ul className="divide-y divide-[var(--border-subtle)]">
-              {past.map((instance) => (
-                <li key={instance.id} className="flex items-start gap-3 py-3">
-                  <Avatar
-                    avatarKey={instance.child.childProfile?.avatarKey ?? 'fox'}
-                    colorKey={instance.child.childProfile?.colorKey ?? 'sage'}
-                    name={instance.child.user.displayName}
-                    size="sm"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium">{instance.titleSnapshot}</p>
-                    <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-                      {instance.child.user.displayName}
-                      {instance.activatedBy !== null && (
-                        <> · activee par {instance.activatedBy.user.displayName}</>
-                      )}
-                      {instance.liftedBy !== null && (
-                        <> · levee par {instance.liftedBy.user.displayName}</>
-                      )}
-                      {instance.liftedAt !== null && (
-                        <> le {formatDate(instance.liftedAt, actor.timeZone)}</>
-                      )}
-                    </p>
-                  </div>
-                  <Badge tone={instance.status === 'LIFTED' ? 'positive' : 'neutral'}>
-                    {SANCTION_STATUS_LABELS[instance.status]}
-                  </Badge>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardBody>
-      </Card>
-    </div>
+        <DashboardColumn>
+          <Card>
+            <CardHeader title="Historique des sanctions" />
+            <CardBody className="pt-0">
+              {past.length === 0 ? (
+                <EmptyState title="Aucune sanction terminee" />
+              ) : (
+                <ul className="divide-y divide-[var(--border-subtle)]">
+                  {past.map((instance) => (
+                    <li key={instance.id} className="flex items-start gap-3 py-3">
+                      <Avatar
+                        avatarKey={instance.child.childProfile?.avatarKey ?? 'fox'}
+                        colorKey={instance.child.childProfile?.colorKey ?? 'sage'}
+                        name={instance.child.user.displayName}
+                        size="sm"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium">{instance.titleSnapshot}</p>
+                        <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                          {instance.child.user.displayName}
+                          {instance.activatedBy !== null && (
+                            <> · activee par {instance.activatedBy.user.displayName}</>
+                          )}
+                          {instance.liftedBy !== null && (
+                            <> · levee par {instance.liftedBy.user.displayName}</>
+                          )}
+                          {instance.liftedAt !== null && (
+                            <> le {formatDate(instance.liftedAt, actor.timeZone)}</>
+                          )}
+                        </p>
+                      </div>
+                      <Badge tone={instance.status === 'LIFTED' ? 'positive' : 'neutral'}>
+                        {SANCTION_STATUS_LABELS[instance.status]}
+                      </Badge>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardBody>
+          </Card>
+        </DashboardColumn>
+      </DashboardGrid>
+    </PageBody>
   );
 };
 

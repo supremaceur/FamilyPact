@@ -74,6 +74,44 @@ export const appendTransaction = async (tx: Db, params: AppendParams): Promise<A
 
   const locked = await lockChildBalance(tx, params.familyId, params.childMembershipId);
 
+  // VERIFIER AVANT D'INSERER, et non rattraper apres coup.
+  //
+  // PostgreSQL avorte la transaction entiere des qu'une instruction echoue :
+  // apres une violation d'unicite, toute commande suivante est refusee avec
+  // 25P02, y compris la lecture qui servirait a retrouver la ligne existante.
+  // Un rattrapage dans le bloc `catch` ne peut donc PAS fonctionner.
+  //
+  // La verification prealable est ici exempte de course, et c'est le verrou
+  // pose juste au-dessus qui le garantit : toute ecriture au registre pour cet
+  // enfant passe par `lockChildBalance`, donc deux transactions concurrentes
+  // visant la meme cle se serialisent sur ce meme verrou. La seconde ne lit
+  // qu'une fois la premiere validee, et voit donc la ligne.
+  // La verification n'a de sens que pour ce que l'index contraint reellement.
+  // PostgreSQL considere les NULL comme distincts : les lignes sans `sourceId`
+  // — ajustements manuels, annulations — ne sont PAS uniques, et plusieurs
+  // peuvent legitimement coexister pour un meme enfant. Les filtrer ici les
+  // ferait passer a tort pour des doublons.
+  if (params.sourceId !== null) {
+    const existing = await tx.pointTransaction.findFirst({
+      where: {
+        familyId: params.familyId,
+        childMembershipId: params.childMembershipId,
+        type: params.type,
+        sourceType: params.sourceType,
+        sourceId: params.sourceId,
+      },
+      select: { id: true },
+    });
+    if (existing !== null) {
+      return {
+        transactionId: existing.id,
+        balanceBefore: locked.balance,
+        balanceAfter: locked.balance,
+        alreadyApplied: true,
+      };
+    }
+  }
+
   try {
     const created = await tx.pointTransaction.create({
       data: {
@@ -111,25 +149,13 @@ export const appendTransaction = async (tx: Db, params: AppendParams): Promise<A
     };
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === UNIQUE_VIOLATION) {
-      // Une transaction identique existe deja : c'est le cas nominal quand deux
-      // parents valident simultanement. On rend le resultat existant.
-      const existing = await tx.pointTransaction.findFirst({
-        where: {
-          familyId: params.familyId,
-          childMembershipId: params.childMembershipId,
-          type: params.type,
-          sourceType: params.sourceType,
-          sourceId: params.sourceId,
-        },
-        select: { id: true },
-      });
-      if (existing === null) throw error;
-      return {
-        transactionId: existing.id,
-        balanceBefore: locked.balance,
-        balanceAfter: locked.balance,
-        alreadyApplied: true,
-      };
+      // Inatteignable tant que toute ecriture passe par le verrou ci-dessus :
+      // la verification prealable aurait deja rendu la ligne existante. Si l'on
+      // arrive ici, c'est qu'une ecriture a contourne le verrou — l'index a
+      // fait son office et protege le registre, mais l'invariant applicatif est
+      // rompu. On relaie l'erreur telle quelle : la transaction est de toute
+      // facon avortee, et la masquer produirait un solde faux.
+      throw error;
     }
     throw error;
   }

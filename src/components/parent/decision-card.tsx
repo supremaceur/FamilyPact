@@ -18,6 +18,13 @@ export interface DecisionOption {
   readonly consequence: ReactNode;
   readonly body: Record<string, unknown>;
   readonly requiresNote?: boolean;
+  /**
+   * Le message devient OBLIGATOIRE : la confirmation reste inerte tant qu'il est
+   * vide. Reserve aux decisions ou l'enfant a besoin de savoir pourquoi — un
+   * retrait, un refus. Le serveur revalide, mais bloquer ici evite au parent de
+   * decouvrir l'exigence apres avoir ferme la boite.
+   */
+  readonly noteMandatory?: boolean;
 }
 
 /**
@@ -127,6 +134,7 @@ export const DecisionCard = ({
           confirmLabel={active.label}
           confirmVariant={active.variant}
           pending={action.pending}
+          confirmDisabled={active.noteMandatory === true && note.trim().length === 0}
           onCancel={() => {
             setActive(null);
           }}
@@ -137,7 +145,12 @@ export const DecisionCard = ({
             {active.requiresNote === true && (
               <TextAreaField
                 label="Message pour l'enfant"
-                hint="Facultatif. Il sera visible dans son historique."
+                hint={
+                  active.noteMandatory === true
+                    ? 'Obligatoire. Il sera visible dans son historique.'
+                    : 'Facultatif. Il sera visible dans son historique.'
+                }
+                required={active.noteMandatory === true}
                 value={note}
                 onChange={(event) => {
                   setNote(event.target.value);

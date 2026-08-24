@@ -1,3 +1,4 @@
+import { toLocalDate } from '@/domain/time';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   FamilyRole,
@@ -244,7 +245,7 @@ describe('Cas J — isolation entre familles', () => {
         pointsAward: 10,
         pointsPenalty: 0,
         recurrence: TaskRecurrence.ONE_OFF,
-        startDate: new Date().toISOString().slice(0, 10),
+        startDate: toLocalDate(new Date(), familyA.timeZone),
         endDate: null,
         dueTime: '20:00',
         weekdays: [],
@@ -255,7 +256,7 @@ describe('Cas J — isolation entre familles', () => {
   });
 
   it("refuse la validation d'une occurrence appartenant a une autre famille", async () => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = toLocalDate(new Date(), familyB.timeZone);
     const { id } = await createTaskDefinition(familyB.ownerActor, {
       childMembershipId: childB.membershipId,
       title: 'Devoirs',

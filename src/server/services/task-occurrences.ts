@@ -334,6 +334,30 @@ const decideOccurrence = async (
       balanceAfter = applied.balanceAfter;
     }
 
+    // Refus assorti du retrait configure. Le type de mouvement est distinct de
+    // TASK_MISSED : l'index unique (sourceType, sourceId, type) reste donc
+    // independant entre les deux, et l'historique garde les deux histoires
+    // separees — un refus n'est pas une echeance laissee passer.
+    if (context.action === 'REJECT_WITH_PENALTY' && occurrence.pointsPenaltySnapshot > 0) {
+      const applied = await applyScoreChange(tx, {
+        familyId: actor.familyId,
+        childMembershipId: occurrence.childMembershipId,
+        childName: occurrence.childName,
+        delta: -occurrence.pointsPenaltySnapshot,
+        type: PointTransactionType.TASK_REJECTED,
+        sourceType: PointTransactionSource.TASK_OCCURRENCE,
+        sourceId: occurrence.id,
+        label: `${occurrence.titleSnapshot} — refusee`,
+        reason: context.note,
+        reversesTransactionId: null,
+        approvedByMembershipId: actor.membershipId,
+        effectiveAt: now,
+        now,
+      });
+      balanceBefore = applied.balanceBefore;
+      balanceAfter = applied.balanceAfter;
+    }
+
     if (context.action === 'CONFIRM_MISSED' && occurrence.pointsPenaltySnapshot > 0) {
       const applied = await applyScoreChange(tx, {
         familyId: actor.familyId,
@@ -405,6 +429,7 @@ const AUDIT_ACTION_BY_TASK_ACTION: Readonly<Record<TaskAction, AuditAction>> = {
   CLAIM_DONE: AuditAction.TASK_CLAIMED,
   APPROVE: AuditAction.TASK_APPROVED,
   REJECT: AuditAction.TASK_REJECTED,
+  REJECT_WITH_PENALTY: AuditAction.TASK_REJECTED_WITH_PENALTY,
   DETECT_MISSED: AuditAction.TASK_MISSED_DETECTED,
   CONFIRM_MISSED: AuditAction.TASK_MISSED_CONFIRMED,
   IGNORE_MISSED: AuditAction.TASK_MISSED_IGNORED,
@@ -434,6 +459,12 @@ const CHILD_NOTIFICATION_BY_TASK_ACTION: Readonly<
     body: (occurrence, parentName) =>
       `${parentName} n'a pas valide « ${occurrence.titleSnapshot} ». Aucun point n'a ete retire.`,
   },
+  REJECT_WITH_PENALTY: {
+    kind: NotificationKind.TASK_REJECTED_WITH_PENALTY,
+    title: 'Tache refusee — points retires',
+    body: (occurrence, parentName) =>
+      `${parentName} n'a pas valide « ${occurrence.titleSnapshot} » : -${occurrence.pointsPenaltySnapshot} points.`,
+  },
   CONFIRM_MISSED: {
     kind: NotificationKind.TASK_MISSED_CONFIRMED,
     title: 'Tache non realisee',
@@ -458,6 +489,8 @@ const buildDecisionSummary = (
       return `${parentName} valide « ${occurrence.titleSnapshot} » pour ${occurrence.childName} : +${occurrence.pointsAwardSnapshot} points.`;
     case 'REJECT':
       return `${parentName} refuse « ${occurrence.titleSnapshot} » pour ${occurrence.childName}. Aucun point retire.`;
+    case 'REJECT_WITH_PENALTY':
+      return `${parentName} refuse « ${occurrence.titleSnapshot} » pour ${occurrence.childName} : -${occurrence.pointsPenaltySnapshot} points.`;
     case 'CONFIRM_MISSED':
       return `${parentName} confirme « ${occurrence.titleSnapshot} » non realisee pour ${occurrence.childName} : -${occurrence.pointsPenaltySnapshot} points.`;
     case 'IGNORE_MISSED':
@@ -490,6 +523,27 @@ export const rejectOccurrence = (
   decideOccurrence(actor, {
     occurrenceId,
     action: 'REJECT',
+    capability: ParentPermission.TASK_APPROVE,
+    expectedStates: [TaskOccurrenceState.CLAIMED_DONE],
+    note,
+  });
+
+/**
+ * Refus assorti du retrait deja configure sur la tache.
+ *
+ * Le parent ne saisit aucun montant : il applique, ou non, une consequence
+ * convenue en amont. C'est la meme capacite que le refus simple — decider
+ * qu'une tache n'est pas validee — avec la consequence que la famille avait
+ * prevue.
+ */
+export const rejectOccurrenceWithPenalty = (
+  actor: FamilyActor,
+  occurrenceId: string,
+  note: string | null = null,
+): Promise<OccurrenceDecisionResult> =>
+  decideOccurrence(actor, {
+    occurrenceId,
+    action: 'REJECT_WITH_PENALTY',
     capability: ParentPermission.TASK_APPROVE,
     expectedStates: [TaskOccurrenceState.CLAIMED_DONE],
     note,

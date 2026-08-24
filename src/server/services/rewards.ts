@@ -8,7 +8,7 @@ import {
   RewardEventStatus,
   RewardRuleStatus,
 } from '@/generated/prisma/enums';
-import { conflictError, notFoundError } from '@/domain/errors';
+import { conflictError, notFoundError, validationError } from '@/domain/errors';
 import { recordAudit } from '@/server/audit/audit-log';
 import { requireCapability, type FamilyActor } from '@/server/auth/context';
 import { prisma } from '@/server/db/prisma';
@@ -20,11 +20,20 @@ import { evaluateChildRules } from './rules-engine';
  * Recompenses de palier.
  *
  * Le systeme PROPOSE, le parent DISPOSE. Aucune recompense n'est accordee
- * automatiquement, et une recompense validee n'est jamais retiree si le score
- * redescend ensuite : elle a ete obtenue, c'est un fait acquis.
+ * automatiquement, et aucune n'est retiree automatiquement non plus.
  *
- * Une recompense de palier ne CONSOMME aucun point : les points de FamiliPact
- * sont un score de progression, pas une monnaie (voir docs/business-rules.md).
+ * Deux natures de recompense, declarees par la famille a la creation du palier
+ * (`RewardRule.revocable`) :
+ *
+ *   - PONCTUELLE (defaut) — un restaurant, une sortie. Une fois vecue, elle ne
+ *     se reprend pas. L'application ne propose meme pas de la retirer.
+ *   - QUI DURE — du temps d'ecran, une permission hebdomadaire. Si le score
+ *     repasse sous le palier, l'application le SIGNALE ; un parent retire, ou
+ *     laisse. Les deux reponses sont normales.
+ *
+ * Une recompense de palier ne CONSOMME aucun point, et son retrait n'en rend
+ * aucun : les points de FamiliPact sont un score de progression, pas une
+ * monnaie (voir docs/business-rules.md).
  */
 
 export const rewardRuleInputSchema = z.object({
@@ -32,9 +41,16 @@ export const rewardRuleInputSchema = z.object({
   threshold: z.int().min(1, 'Le palier doit etre superieur a zero.').max(1_000_000),
   title: z.string().trim().min(1, 'Le titre est obligatoire.').max(120),
   description: z.string().trim().max(1_000).nullable().default(null),
+  /** Recompense qui dure, donc retirable. Voir l'en-tete du module. */
+  revocable: z.boolean().default(false),
 });
 
-export type RewardRuleInput = z.infer<typeof rewardRuleInputSchema>;
+/**
+ * Type d'ENTREE, pas de sortie : `z.input` laisse optionnels les champs qui ont
+ * une valeur par defaut. Un appelant qui ne connait pas `revocable` obtient une
+ * recompense ponctuelle — le comportement le plus sur, et celui d'avant.
+ */
+export type RewardRuleInput = z.input<typeof rewardRuleInputSchema>;
 
 const loadChild = async (
   familyId: string,
@@ -64,6 +80,7 @@ export const createRewardRule = async (
         threshold: parsed.threshold,
         title: parsed.title,
         description: parsed.description,
+        revocable: parsed.revocable,
         createdById: actor.membershipId,
       },
       select: { id: true },
@@ -128,6 +145,7 @@ export const updateRewardRule = async (
         threshold: parsed.threshold,
         title: parsed.title,
         description: parsed.description,
+        revocable: parsed.revocable,
       },
     });
 
@@ -279,3 +297,183 @@ export const ignoreReward = (
   rewardEventId: string,
   note: string | null = null,
 ): Promise<RewardDecisionResult> => decideRewardEvent(actor, rewardEventId, 'IGNORE', note);
+
+// ---------------------------------------------------------------------------
+// Retrait d'une recompense qui durait
+// ---------------------------------------------------------------------------
+
+export interface RewardRevocationResult {
+  readonly status: RewardEventStatus;
+  /** Un autre parent avait deja tranche : la reponse le dit plutot qu'echouer. */
+  readonly alreadyDecided: boolean;
+}
+
+/**
+ * Retire une recompense accordee.
+ *
+ * Trois garde-fous, dans cet ordre :
+ *
+ *   1. seule une recompense ACCORDEE peut etre retiree — on ne retire pas une
+ *      proposition en attente, on l'ignore ;
+ *   2. seule une regle declaree `revocable` le permet — c'est la famille qui a
+ *      dit, en creant le palier, que cette recompense durait ;
+ *   3. le motif est obligatoire — l'enfant doit savoir pourquoi, et le retrait
+ *      apparait dans son historique avec ce motif.
+ *
+ * AUCUN POINT N'EST RENDU NI RETIRE. La recompense n'avait rien coute : elle
+ * n'a rien a rembourser. Confondre les deux ferait des points une monnaie.
+ *
+ * Le score courant n'est volontairement PAS verifie ici. Un parent peut retirer
+ * une recompense pour une raison qui n'a rien a voir avec le score, et
+ * l'application n'a pas a lui demander de justifier sa decision par un chiffre.
+ * Le score ne sert qu'a SIGNALER (voir `suggestRewardRevocations`).
+ */
+export const revokeReward = async (
+  actor: FamilyActor,
+  rewardEventId: string,
+  reason: string,
+): Promise<RewardRevocationResult> => {
+  requireCapability(actor, ParentPermission.REWARD_APPROVE);
+
+  const motif = reason.trim();
+  if (motif.length === 0) {
+    throw validationError('Indiquez pourquoi la recompense est retiree.');
+  }
+  if (motif.length > 1_000) {
+    throw validationError('Le motif est trop long.');
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const event = await tx.rewardEvent.findFirst({
+      where: { id: rewardEventId, familyId: actor.familyId },
+      select: {
+        id: true,
+        status: true,
+        titleSnapshot: true,
+        thresholdSnapshot: true,
+        childMembershipId: true,
+        rewardRule: { select: { revocable: true } },
+        child: { select: { user: { select: { displayName: true } } } },
+      },
+    });
+    if (event === null) throw notFoundError('Cette recompense est introuvable.');
+
+    if (!event.rewardRule.revocable) {
+      throw conflictError(
+        'Ce palier a ete cree comme une recompense ponctuelle : une fois accordee, elle ne se retire pas. Seules les recompenses qui durent sont retirables.',
+      );
+    }
+
+    const updated = await tx.rewardEvent.updateMany({
+      where: { id: rewardEventId, familyId: actor.familyId, status: RewardEventStatus.GRANTED },
+      data: {
+        status: RewardEventStatus.REVOKED,
+        revokedAt: new Date(),
+        revokedById: actor.membershipId,
+        revocationReason: motif,
+      },
+    });
+    if (updated.count === 0) {
+      return { status: event.status, alreadyDecided: true };
+    }
+
+    const childName = event.child.user.displayName;
+    await recordAudit(tx, {
+      familyId: actor.familyId,
+      actorUserId: actor.userId,
+      actorMembershipId: actor.membershipId,
+      actorLabel: actor.displayName,
+      action: AuditAction.REWARD_REVOKED,
+      summary: `${actor.displayName} retire la recompense « ${event.titleSnapshot} » a ${childName}.`,
+      targetType: 'RewardEvent',
+      targetId: rewardEventId,
+      metadata: {
+        rewardEventId,
+        threshold: event.thresholdSnapshot,
+        childMembershipId: event.childMembershipId,
+        childName,
+        reason: motif,
+      },
+    });
+
+    await notify(tx, {
+      familyId: actor.familyId,
+      recipientMembershipId: event.childMembershipId,
+      kind: NotificationKind.REWARD_REVOKED,
+      title: 'Recompense retiree',
+      body: `${actor.displayName} a retire « ${event.titleSnapshot} ». Motif : ${motif}`,
+      linkPath: '/enfant/recompenses',
+      dedupeKey: `reward-revoked:${rewardEventId}`,
+    });
+
+    return { status: RewardEventStatus.REVOKED, alreadyDecided: false };
+  });
+};
+
+/**
+ * Laisse la recompense malgre un score redescendu sous le palier.
+ *
+ * Ne change rien a la recompense : marque seulement que la question a ete
+ * tranchee, pour que l'application cesse de la poser. Une application qui
+ * redemande tous les jours finit par obtenir un oui de lassitude — et ce oui-la
+ * ne serait pas une decision.
+ *
+ * Le retrait manuel reste possible ensuite, a tout moment.
+ */
+export const keepReward = async (
+  actor: FamilyActor,
+  rewardEventId: string,
+  note: string | null = null,
+): Promise<RewardRevocationResult> => {
+  requireCapability(actor, ParentPermission.REWARD_APPROVE);
+
+  return prisma.$transaction(async (tx) => {
+    const event = await tx.rewardEvent.findFirst({
+      where: { id: rewardEventId, familyId: actor.familyId },
+      select: {
+        id: true,
+        status: true,
+        keptAt: true,
+        titleSnapshot: true,
+        childMembershipId: true,
+        child: { select: { user: { select: { displayName: true } } } },
+      },
+    });
+    if (event === null) throw notFoundError('Cette recompense est introuvable.');
+
+    const updated = await tx.rewardEvent.updateMany({
+      where: {
+        id: rewardEventId,
+        familyId: actor.familyId,
+        status: RewardEventStatus.GRANTED,
+        keptAt: null,
+      },
+      data: { keptAt: new Date() },
+    });
+    if (updated.count === 0) {
+      return { status: event.status, alreadyDecided: true };
+    }
+
+    const childName = event.child.user.displayName;
+    await recordAudit(tx, {
+      familyId: actor.familyId,
+      actorUserId: actor.userId,
+      actorMembershipId: actor.membershipId,
+      actorLabel: actor.displayName,
+      action: AuditAction.REWARD_KEPT,
+      summary: `${actor.displayName} laisse la recompense « ${event.titleSnapshot} » a ${childName} malgre un score redescendu.`,
+      targetType: 'RewardEvent',
+      targetId: rewardEventId,
+      metadata: {
+        rewardEventId,
+        childMembershipId: event.childMembershipId,
+        childName,
+        ...(note !== null && note.trim().length > 0 ? { reason: note.trim() } : {}),
+      },
+    });
+
+    // Aucune notification : l'enfant garde ce qu'il avait. Le prevenir qu'on a
+    // envisage de le lui retirer ne lui apprendrait rien d'utile.
+    return { status: RewardEventStatus.GRANTED, alreadyDecided: false };
+  });
+};

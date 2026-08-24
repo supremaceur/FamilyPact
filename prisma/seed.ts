@@ -443,6 +443,36 @@ const main = async (): Promise<void> => {
       },
     });
 
+    // Une recompense QUI DURE, obtenue puis passee sous le palier : le score
+    // d'Emma est redescendu a 65 alors qu'il fallait 100. L'ecran parent la
+    // signale donc « a revoir » — et laisser reste une reponse normale.
+    const ecran = await prisma.rewardRule.create({
+      data: {
+        familyId: family.id,
+        childMembershipId: emma.membershipId,
+        threshold: 100,
+        title: "30 min d'ecran en plus",
+        description: 'Chaque soir, tant que le score se tient au-dessus de 100.',
+        revocable: true,
+        createdById: marie.membershipId,
+      },
+      select: { id: true },
+    });
+    await prisma.rewardEvent.create({
+      data: {
+        familyId: family.id,
+        rewardRuleId: ecran.id,
+        childMembershipId: emma.membershipId,
+        status: RewardEventStatus.GRANTED,
+        titleSnapshot: "30 min d'ecran en plus",
+        thresholdSnapshot: 100,
+        scoreAtProposal: 110,
+        proposedAt: new Date(Date.now() - 6 * 86_400_000),
+        decidedAt: new Date(Date.now() - 6 * 86_400_000),
+        decidedById: marie.membershipId,
+      },
+    });
+
     // --- Sanctions ------------------------------------------------------------
     const sanctionRule = await prisma.sanctionRule.create({
       data: {

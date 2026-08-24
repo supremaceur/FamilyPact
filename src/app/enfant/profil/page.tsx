@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { PageBody } from '@/components/layout/page-body';
 import { PasskeyManager } from '@/components/security/passkey-manager';
 import { LogoutButton } from '@/components/security/logout-button';
 import { Avatar } from '@/components/ui/avatar';
@@ -25,7 +26,7 @@ const ChildProfilePage = async () => {
   ]);
 
   return (
-    <div className="mx-auto flex max-w-xl flex-col gap-6">
+    <PageBody largeur="lecture" className="flex flex-col gap-6">
       <Card>
         <CardBody className="flex items-center gap-4 pt-5">
           <Avatar
@@ -68,7 +69,7 @@ const ChildProfilePage = async () => {
           <LogoutButton />
         </CardBody>
       </Card>
-    </div>
+    </PageBody>
   );
 };
 

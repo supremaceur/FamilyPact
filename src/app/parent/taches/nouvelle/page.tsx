@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { PageBody } from '@/components/layout/page-body';
 import { redirect } from 'next/navigation';
 import { ParentPermission } from '@/generated/prisma/enums';
 import { TaskForm } from '@/components/parent/task-form';
@@ -16,7 +17,7 @@ const NewTaskPage = async () => {
   const children = await listChildren(actor);
 
   return (
-    <div className="mx-auto max-w-xl">
+    <PageBody largeur="lecture">
       <Card>
         <CardHeader
           title="Nouvelle tache"
@@ -31,7 +32,7 @@ const NewTaskPage = async () => {
           />
         </CardBody>
       </Card>
-    </div>
+    </PageBody>
   );
 };
 

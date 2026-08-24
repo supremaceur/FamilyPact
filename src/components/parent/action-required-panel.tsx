@@ -38,6 +38,14 @@ const ROWS: readonly {
       count === 1 ? '1 recompense proposee a valider' : `${count} recompenses proposees a valider`,
   },
   {
+    key: 'rewardRevocations',
+    href: '/parent/recompenses',
+    label: (count) =>
+      count === 1
+        ? '1 recompense a revoir : le score est repasse sous le palier'
+        : `${count} recompenses a revoir : le score est repasse sous le palier`,
+  },
+  {
     key: 'sanctionActivations',
     href: '/parent/sanctions',
     label: (count) =>
@@ -56,7 +64,9 @@ const ROWS: readonly {
 ];
 
 export const ActionRequiredPanel = ({ counts }: { readonly counts: ActionRequiredCountsView }) => (
-  <Card>
+  // Le lisere teal ne s'allume que s'il y a effectivement une decision a
+  // prendre : un accent permanent cesse d'attirer l'oeil au bout d'un jour.
+  <Card tone={counts.total > 0 ? 'lead' : 'default'}>
     <CardHeader
       title="Actions requises"
       description={

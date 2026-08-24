@@ -42,6 +42,39 @@ describe("machine d'etat des taches", () => {
     );
   });
 
+  it('offre deux refus : le meme etat, deux consequences differentes', () => {
+    const points = { award: 20, penalty: 10 };
+
+    // Les deux refus menent au MEME etat : la tache n'a pas ete validee, et
+    // l'enfant peut la redeclarer dans les deux cas.
+    expect(applyTransition(TaskOccurrenceState.CLAIMED_DONE, 'REJECT_WITH_PENALTY')).toBe(
+      TaskOccurrenceState.REJECTED,
+    );
+    expect(applyTransition(TaskOccurrenceState.REJECTED, 'CLAIM_DONE')).toBe(
+      TaskOccurrenceState.CLAIMED_DONE,
+    );
+
+    // Seule la consequence sur les points les distingue.
+    expect(ledgerEffectOf('REJECT', points)).toBeNull();
+    expect(ledgerEffectOf('REJECT_WITH_PENALTY', points)).toBe(-10);
+  });
+
+  it('applique au refus le retrait configure sur la tache, jamais un autre', () => {
+    // Le parent ne saisit aucun montant : c'est celui de la tache qui s'applique.
+    expect(ledgerEffectOf('REJECT_WITH_PENALTY', { award: 20, penalty: 35 })).toBe(-35);
+    // Sans retrait configure, le refus avec retrait n'ecrit rien : l'interface
+    // ne propose d'ailleurs pas le bouton dans ce cas.
+    expect(ledgerEffectOf('REJECT_WITH_PENALTY', { award: 20, penalty: 0 })).toBeNull();
+  });
+
+  it("interdit de refuser une tache qui n'a pas ete declaree terminee", () => {
+    expect(canTransition(TaskOccurrenceState.TODO, 'REJECT_WITH_PENALTY')).toBe(false);
+    expect(canTransition(TaskOccurrenceState.MISSED_PENDING_REVIEW, 'REJECT_WITH_PENALTY')).toBe(
+      false,
+    );
+    expect(canTransition(TaskOccurrenceState.APPROVED, 'REJECT_WITH_PENALTY')).toBe(false);
+  });
+
   it('place une echeance depassee en attente de decision, sans retirer de points', () => {
     expect(applyTransition(TaskOccurrenceState.TODO, 'DETECT_MISSED')).toBe(
       TaskOccurrenceState.MISSED_PENDING_REVIEW,
@@ -83,6 +116,8 @@ describe("machine d'etat des taches", () => {
     expect(ledgerEffectOf('CLAIM_DONE', points)).toBeNull();
     expect(ledgerEffectOf('REJECT', points)).toBeNull();
     expect(ledgerEffectOf('IGNORE_MISSED', points)).toBeNull();
+    // Le refus avec retrait est la seule autre ecriture possible.
+    expect(ledgerEffectOf('REJECT_WITH_PENALTY', points)).toBe(-10);
   });
 
   it("n'ecrit rien quand la tache ne vaut aucun point", () => {

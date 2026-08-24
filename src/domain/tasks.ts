@@ -27,7 +27,13 @@ import {
 export { TaskOccurrenceState, TaskRecurrence };
 
 export type TaskAction =
-  'CLAIM_DONE' | 'APPROVE' | 'REJECT' | 'DETECT_MISSED' | 'CONFIRM_MISSED' | 'IGNORE_MISSED';
+  | 'CLAIM_DONE'
+  | 'APPROVE'
+  | 'REJECT'
+  | 'REJECT_WITH_PENALTY'
+  | 'DETECT_MISSED'
+  | 'CONFIRM_MISSED'
+  | 'IGNORE_MISSED';
 
 /** Transitions autorisees, indexees par etat de depart. */
 const TRANSITIONS: Readonly<
@@ -39,7 +45,11 @@ const TRANSITIONS: Readonly<
   },
   CLAIMED_DONE: {
     APPROVE: TaskOccurrenceState.APPROVED,
+    // Les deux refus menent au MEME etat : la tache n'a pas ete validee. Seul
+    // leur effet sur les points differe, et cet effet est porte par le ledger,
+    // pas par l'etat de l'occurrence.
     REJECT: TaskOccurrenceState.REJECTED,
+    REJECT_WITH_PENALTY: TaskOccurrenceState.REJECTED,
   },
   // Une tache refusee retombe a faire : l'enfant peut la re-declarer terminee,
   // et l'echeance depassee reste detectable.
@@ -94,7 +104,12 @@ export const ledgerEffectOf = (
   switch (action) {
     case 'APPROVE':
       return points.award > 0 ? points.award : null;
+    // Un refus avec retrait applique le MEME montant qu'une echeance confirmee :
+    // celui configure sur la tache. Le parent ne saisit aucun chiffre au moment
+    // de decider — il choisit d'appliquer, ou non, une consequence deja convenue
+    // en famille.
     case 'CONFIRM_MISSED':
+    case 'REJECT_WITH_PENALTY':
       return points.penalty > 0 ? -points.penalty : null;
     case 'CLAIM_DONE':
     case 'REJECT':

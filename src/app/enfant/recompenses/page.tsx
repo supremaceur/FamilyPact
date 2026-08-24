@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { DashboardColumn, DashboardGrid, PageBody } from '@/components/layout/page-body';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ProgressBar } from '@/components/ui/progress';
@@ -13,68 +15,103 @@ const ChildRewardsPage = async () => {
   const data = await getChildDashboard(actor);
 
   return (
-    <div className="mx-auto flex max-w-xl flex-col gap-6">
-      <Card>
-        <CardHeader title="Prochaine recompense" />
-        <CardBody className="pt-0">
-          {data.nextReward === null ? (
-            <EmptyState
-              title="Aucune recompense prevue"
-              description="Tes parents n'ont pas encore defini de palier. Tes points continuent de se cumuler."
-            />
-          ) : (
-            <div>
-              <p className="font-medium">{data.nextReward.title}</p>
-              <ProgressBar
-                className="mt-3"
-                value={data.score}
-                max={data.nextReward.threshold}
-                label={`Progression vers ${data.nextReward.title}`}
-              />
-              <div className="tabular mt-2 flex items-baseline justify-between text-sm">
-                <span className="text-[var(--text-muted)]">
-                  {data.score} / {data.nextReward.threshold}
-                </span>
-                <span className="font-medium">
-                  {data.nextReward.remaining === 0
-                    ? 'Palier atteint — un parent doit valider'
-                    : `${data.nextReward.remaining} point${data.nextReward.remaining > 1 ? 's' : ''} restant${data.nextReward.remaining > 1 ? 's' : ''}`}
-                </span>
-              </div>
-            </div>
-          )}
-        </CardBody>
-      </Card>
-
-      <Card>
-        <CardHeader title="Recompenses obtenues" />
-        <CardBody className="pt-0">
-          {data.grantedRewards.length === 0 ? (
-            <EmptyState title="Aucune recompense obtenue pour le moment" />
-          ) : (
-            <ul className="divide-y divide-[var(--border-subtle)]">
-              {data.grantedRewards.map((reward) => (
-                <li key={reward.id} className="flex items-center justify-between gap-3 py-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{reward.title}</p>
-                    <p className="text-xs text-[var(--text-muted)]">
-                      Palier {reward.threshold} points
-                      {reward.decidedAt !== null && (
-                        <> · obtenue le {formatDate(reward.decidedAt, actor.timeZone)}</>
-                      )}
-                    </p>
+    <PageBody largeur="liste">
+      <DashboardGrid>
+        <DashboardColumn>
+          <Card>
+            <CardHeader title="Prochaine recompense" />
+            <CardBody className="pt-0">
+              {data.nextReward === null ? (
+                <EmptyState
+                  title="Aucune recompense prevue"
+                  description="Tes parents n'ont pas encore defini de palier. Tes points continuent de se cumuler."
+                />
+              ) : (
+                <div>
+                  <p className="font-medium">{data.nextReward.title}</p>
+                  <ProgressBar
+                    className="mt-3"
+                    value={data.score}
+                    max={data.nextReward.threshold}
+                    label={`Progression vers ${data.nextReward.title}`}
+                  />
+                  <div className="tabular mt-2 flex items-baseline justify-between text-sm">
+                    <span className="text-[var(--text-muted)]">
+                      {data.score} / {data.nextReward.threshold}
+                    </span>
+                    <span className="font-medium">
+                      {data.nextReward.remaining === 0
+                        ? 'Palier atteint — un parent doit valider'
+                        : `${data.nextReward.remaining} point${data.nextReward.remaining > 1 ? 's' : ''} restant${data.nextReward.remaining > 1 ? 's' : ''}`}
+                    </span>
                   </div>
-                </li>
-              ))}
-            </ul>
+                </div>
+              )}
+            </CardBody>
+          </Card>
+        </DashboardColumn>
+
+        <DashboardColumn>
+          <Card>
+            <CardHeader title="Recompenses obtenues" />
+            <CardBody className="pt-0">
+              {data.grantedRewards.length === 0 ? (
+                <EmptyState title="Aucune recompense obtenue pour le moment" />
+              ) : (
+                <ul className="divide-y divide-[var(--border-subtle)]">
+                  {data.grantedRewards.map((reward) => (
+                    <li key={reward.id} className="flex items-center justify-between gap-3 py-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{reward.title}</p>
+                        <p className="text-xs text-[var(--text-muted)]">
+                          Palier {reward.threshold} points
+                          {reward.decidedAt !== null && (
+                            <> · obtenue le {formatDate(reward.decidedAt, actor.timeZone)}</>
+                          )}
+                        </p>
+                      </div>
+                      {reward.revocable && <Badge tone="info">Dure dans le temps</Badge>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="mt-4 text-xs text-[var(--text-muted)]">
+                Une recompense ne te coute aucun point. Celles qui sont ponctuelles restent
+                acquises. Celles qui durent — du temps d&apos;ecran, une permission — peuvent etre
+                retirees par un parent si ton score repasse sous le palier.
+              </p>
+            </CardBody>
+          </Card>
+
+          {data.revokedRewards.length > 0 && (
+            <Card>
+              <CardHeader
+                title="Recompenses retirees"
+                description="Un parent a repris ces recompenses. Le motif est indique."
+              />
+              <CardBody className="pt-0">
+                <ul className="divide-y divide-[var(--border-subtle)]">
+                  {data.revokedRewards.map((reward) => (
+                    <li key={reward.id} className="py-3">
+                      <p className="text-sm font-medium">{reward.title}</p>
+                      <p className="text-xs text-[var(--text-muted)]">
+                        Palier {reward.threshold} points
+                        {reward.revokedAt !== null && (
+                          <> · retiree le {formatDate(reward.revokedAt, actor.timeZone)}</>
+                        )}
+                      </p>
+                      {reward.reason !== null && (
+                        <p className="mt-1 text-xs text-[var(--text-secondary)]">{reward.reason}</p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </CardBody>
+            </Card>
           )}
-          <p className="mt-4 text-xs text-[var(--text-muted)]">
-            Une recompense obtenue reste acquise, meme si ton score redescend ensuite. Elle ne te
-            coute aucun point.
-          </p>
-        </CardBody>
-      </Card>
-    </div>
+        </DashboardColumn>
+      </DashboardGrid>
+    </PageBody>
   );
 };
 

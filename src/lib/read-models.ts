@@ -32,6 +32,8 @@ export interface ActionRequiredCountsView {
   readonly taskApprovals: number;
   readonly missedReviews: number;
   readonly rewardApprovals: number;
+  /** Recompenses qui durent, detenues, dont le score est repasse sous le palier. */
+  readonly rewardRevocations: number;
   readonly sanctionActivations: number;
   readonly sanctionLifts: number;
   readonly total: number;

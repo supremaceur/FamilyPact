@@ -89,10 +89,16 @@ npm run db:migrate -- --create-only   # crée sans appliquer, pour éditer le SQ
 
 ### État des migrations
 
-| Migration                       | Contenu                                                                                          |
-| ------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `20260824115907_initial_schema` | 22 tables, index et clés étrangères, dont les clés composites d'isolation                        |
-| `20260824120500_domain_guards`  | Index uniques partiels, contraintes `CHECK`, triggers append-only, index partiels de performance |
+| Migration                              | Contenu                                                                                                           |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `20260824115907_initial_schema`        | 22 tables, index et clés étrangères, dont les clés composites d'isolation                                         |
+| `20260824120500_domain_guards`         | Index uniques partiels, contraintes `CHECK`, triggers append-only, index partiels de performance                  |
+| `20260824203650_refus_avec_retrait`    | Trois `ALTER TYPE … ADD VALUE` : `TASK_REJECTED_WITH_PENALTY` (audit, notification) et `TASK_REJECTED` (registre) |
+| `20260824230000_revocation_recompense` | `RewardRule.revocable`, quatre colonnes de retrait sur `RewardEvent`, trois valeurs d'énumération                 |
+
+Les deux dernières sont **purement additives** : aucune colonne supprimée, aucune
+ligne existante modifiée, et `revocable` vaut `false` par défaut — rien ne devient
+retirable sans qu'un parent l'ait voulu.
 
 La seconde est **écrite à la main** : Prisma ne sait exprimer ni les index partiels, ni
 les `CHECK`, ni les triggers. Elle fait partie de l'historique et est rejouée sur la
