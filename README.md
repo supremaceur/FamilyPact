@@ -188,6 +188,7 @@ Les documents ci-dessous sont des références, consultées au besoin :
 
 | Document                                         | Contenu                                                  |
 | ------------------------------------------------ | -------------------------------------------------------- |
+| [docs/interface.md](docs/interface.md)           | Palette, composants, mobile-first, accessibilité, ton    |
 | [docs/architecture.md](docs/architecture.md)     | Choix techniques, décisions et leurs justifications      |
 | [docs/data-model.md](docs/data-model.md)         | Schéma relationnel, contraintes, invariants              |
 | [docs/business-rules.md](docs/business-rules.md) | Règles métier, machines d'état, moteur de règles         |

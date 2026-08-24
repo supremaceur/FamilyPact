@@ -36,18 +36,19 @@ une monnaie — il n'existe pas de catalogue où l'on dépense un solde.
 
 ## Où chercher
 
-| Question                                          | Fichier                  |
-| ------------------------------------------------- | ------------------------ |
-| Où en est le projet, qu'est-ce qui est cassé      | `docs/ETAT.md`           |
-| Pourquoi tel choix a été fait                     | `docs/DECISIONS.md`      |
-| Règles métier, machine à états, cas A à K         | `docs/business-rules.md` |
-| Schéma, index, contraintes                        | `docs/data-model.md`     |
-| Isolation, chiffrement, surface d'attaque         | `docs/security.md`       |
-| Sessions, MFA, WebAuthn                           | `docs/authentication.md` |
-| Rôles et capacités                                | `docs/permissions.md`    |
-| Variables d'environnement, Vercel, Supabase, cron | `docs/deployment.md`     |
-| Découpage des couches                             | `docs/architecture.md`   |
-| Données personnelles, RGPD                        | `docs/privacy.md`        |
+| Question                                           | Fichier                  |
+| -------------------------------------------------- | ------------------------ |
+| Où en est le projet, qu'est-ce qui est cassé       | `docs/ETAT.md`           |
+| Pourquoi tel choix a été fait                      | `docs/DECISIONS.md`      |
+| Règles métier, machine à états, cas A à K          | `docs/business-rules.md` |
+| Schéma, index, contraintes                         | `docs/data-model.md`     |
+| Isolation, chiffrement, surface d'attaque          | `docs/security.md`       |
+| Sessions, MFA, WebAuthn                            | `docs/authentication.md` |
+| Rôles et capacités                                 | `docs/permissions.md`    |
+| Variables d'environnement, Vercel, Supabase, cron  | `docs/deployment.md`     |
+| Palette, composants, accessibilité, ton des textes | `docs/interface.md`      |
+| Découpage des couches                              | `docs/architecture.md`   |
+| Données personnelles, RGPD                         | `docs/privacy.md`        |
 
 ## Contraintes d'environnement à ne pas redécouvrir
 
