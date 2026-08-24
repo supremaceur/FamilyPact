@@ -1,0 +1,8 @@
+-- AlterEnum
+ALTER TYPE "AuditAction" ADD VALUE 'TASK_REJECTED_WITH_PENALTY';
+
+-- AlterEnum
+ALTER TYPE "NotificationKind" ADD VALUE 'TASK_REJECTED_WITH_PENALTY';
+
+-- AlterEnum
+ALTER TYPE "PointTransactionType" ADD VALUE 'TASK_REJECTED';

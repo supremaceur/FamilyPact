@@ -91,6 +91,36 @@ const ApprovalsPage = async () => {
                           </>
                         ),
                       },
+                      // Le refus avec retrait n'est propose que si la tache a un
+                      // retrait configure : sinon il n'aurait rien a retirer, et
+                      // un bouton « -0 » n'aurait aucun sens.
+                      ...(occurrence.pointsPenaltySnapshot > 0
+                        ? [
+                            {
+                              id: 'reject-with-penalty',
+                              label: `Refuser et retirer −${occurrence.pointsPenaltySnapshot}`,
+                              variant: 'danger' as const,
+                              confirmTitle: 'Refuser et retirer des points ?',
+                              requiresNote: true,
+                              body: { action: 'reject-with-penalty' },
+                              consequence: (
+                                <>
+                                  <p>
+                                    {occurrence.child.user.displayName} perdra{' '}
+                                    <strong>−{occurrence.pointsPenaltySnapshot} points</strong> pour
+                                    « {occurrence.titleSnapshot} ». La tache redeviendra « a faire
+                                    », et le retrait ne pourra pas etre applique une seconde fois
+                                    sur cette occurrence.
+                                  </p>
+                                  <ScorePreview
+                                    before={score}
+                                    delta={-occurrence.pointsPenaltySnapshot}
+                                  />
+                                </>
+                              ),
+                            },
+                          ]
+                        : []),
                     ]}
                   />
                 );

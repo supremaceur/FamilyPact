@@ -9,6 +9,7 @@ import {
   confirmMissedOccurrence,
   ignoreMissedOccurrence,
   rejectOccurrence,
+  rejectOccurrenceWithPenalty,
 } from '@/server/services/task-occurrences';
 
 /**
@@ -39,6 +40,8 @@ export const POST = (
         return jsonOk(await approveOccurrence(actor, occurrenceId, note));
       case 'reject':
         return jsonOk(await rejectOccurrence(actor, occurrenceId, note));
+      case 'reject-with-penalty':
+        return jsonOk(await rejectOccurrenceWithPenalty(actor, occurrenceId, note));
       case 'confirm-missed':
         return jsonOk(await confirmMissedOccurrence(actor, occurrenceId, note));
       case 'ignore-missed':

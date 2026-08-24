@@ -558,6 +558,13 @@ model TaskOccurrence {
 enum PointTransactionType {
   TASK_APPROVED
   TASK_MISSED
+  /// Refus d'une tache declaree terminee, assorti du retrait configure.
+  /// Distinct de TASK_MISSED : l'enfant a declare, le parent a refuse — ce
+  /// n'est pas la meme histoire qu'une echeance laissee passer. La distinction
+  /// rend aussi les deux retraits independants vis-a-vis de l'index unique
+  /// (sourceType, sourceId, type) : une meme occurrence peut connaitre un refus
+  /// puis, plus tard, une echeance depassee.
+  TASK_REJECTED
   MANUAL_ADJUSTMENT
   REVERSAL
 }
@@ -839,6 +846,7 @@ enum NotificationKind {
   SANCTION_LIFT_ELIGIBLE
   TASK_APPROVED
   TASK_REJECTED
+  TASK_REJECTED_WITH_PENALTY
   TASK_MISSED_CONFIRMED
   POINTS_ADJUSTED
   REWARD_GRANTED
@@ -915,6 +923,7 @@ enum AuditAction {
   TASK_CLAIMED
   TASK_APPROVED
   TASK_REJECTED
+  TASK_REJECTED_WITH_PENALTY
   TASK_MISSED_DETECTED
   TASK_MISSED_CONFIRMED
   TASK_MISSED_IGNORED
