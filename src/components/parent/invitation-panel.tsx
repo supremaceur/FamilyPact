@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { SelectField, TextField } from '@/components/ui/field';
+import { QrCode } from '@/components/ui/qr-code';
 import { StepUpPrompt } from '@/components/security/step-up-prompt';
 import { apiPost } from '@/lib/api-client';
 import { useAction } from '@/lib/use-action';
@@ -94,12 +95,7 @@ export const InvitationPanel = ({
         {qrSvg !== null && (
           <div className="rounded-[var(--radius-card)] border border-[var(--border-strong)] p-4">
             <p className="text-xs text-[var(--text-muted)]">Ou scanner ce QR code</p>
-            <div
-              className="mt-2 w-fit rounded-[var(--radius-control)] bg-white p-2"
-              dangerouslySetInnerHTML={{ __html: qrSvg }}
-              role="img"
-              aria-label="QR code d'invitation"
-            />
+            <QrCode className="mt-2" svg={qrSvg} label="QR code d'invitation" />
           </div>
         )}
 
