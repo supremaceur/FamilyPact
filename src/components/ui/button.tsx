@@ -53,6 +53,9 @@ export const Button = ({
     type={type}
     disabled={disabled === true || pending}
     aria-busy={pending || undefined}
+    // Repris par la feuille de style pour rehabiller le bouton principal dans
+    // l'espace enfant, sans avoir a passer une variante de plus a l'appelant.
+    data-variant={variant}
     className={cn(
       'inline-flex items-center justify-center rounded-[var(--radius-control)] font-medium',
       'transition-colors duration-150',

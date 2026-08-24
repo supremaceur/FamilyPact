@@ -146,6 +146,70 @@ d'attente peut en porter deux (c'est le cas de `/parent/validations`, dont les
 deux colonnes sont deux files) ; partout ailleurs, une seule, sans quoi l'accent
 ne désigne plus rien.
 
+## Deux espaces, deux habillages
+
+L'espace parent et l'espace enfant partagent la même coquille et les mêmes
+composants, mais pas la même apparence. `AppShell` pose `data-espace` sur sa
+racine, et la feuille de style redéfinit les jetons dessous. **Aucun composant
+ne sait dans quel espace il est rendu** : la même `<Card>` produit une surface
+mate côté parent et une surface translucide côté enfant.
+
+|                  | Parent — « Ardoise »        | Enfant — « Halo »                       |
+| ---------------- | --------------------------- | --------------------------------------- |
+| Fond             | Deux halos très faibles     | Deux halos assumés, turquoise et violet |
+| Surfaces         | Opaques, dégradé très court | Translucides — le halo transparaît      |
+| Rayons           | `1rem`                      | `1.25rem`                               |
+| Corps            | Base                        | Un cran plus grand (`1.0625rem`)        |
+| Progression      | Barre                       | Anneau, barre conservée ailleurs        |
+| Bouton principal | Aplat                       | Dégradé turquoise                       |
+
+**Pourquoi les séparer.** Un parent arbitre : son espace doit rester calme,
+dense, lisible longtemps. Un enfant consulte et déclare : le sien doit être
+accueillant et évident en une seconde. Et sur un téléphone partagé, on doit
+savoir d'un coup d'œil dans lequel on se trouve.
+
+**Ce que « Halo » n'emprunte pas.** L'esthétique de référence était très
+ludifiée. Rien de tout cela n'a été repris : ni niveau, ni barre d'expérience,
+ni série, ni pièce, ni classement entre enfants, ni titre. Les points restent un
+repérage de progression, jamais une monnaie — voir `business-rules.md`,
+section 7.
+
+### Les deux seules règles hors couche du projet
+
+Deux déclarations doivent écraser une classe utilitaire — le fond de la coquille
+(`bg-[var(--surface-raised)]`) et le bouton principal (`bg-pact-600`). Placées
+dans `@layer base`, elles perdraient : **une règle en couche perd toujours
+contre `@layer utilities`, déclarée après, quelle que soit sa spécificité.**
+Elles sont donc écrites en fin de `globals.css`, hors de toute couche — une
+règle sans couche l'emporte sur toutes les règles en couche.
+
+C'est le seul endroit du projet où l'on sort des couches. Tout le reste de la
+direction passe par des jetons, qui n'entrent en conflit avec rien.
+
+### L'anneau de progression
+
+`ProgressRing` porte la même information que `ProgressBar`, avec plus de
+présence. Deux précautions, parce qu'un anneau se lit moins vite qu'une barre :
+
+- le score est écrit en grand au centre, et le rappel chiffré (« 375 / 500 ·
+  125 points restants ») accompagne toujours l'anneau ;
+- le dégradé conique est `aria-hidden` ; l'état est porté par le
+  `role="progressbar"` du conteneur et son `aria-valuetext` en toutes lettres.
+
+Le trou est percé par un `mask` plutôt que couvert par un disque : il n'y a donc
+aucune couleur à faire correspondre avec la carte qui porte l'anneau, et la
+surface translucide continue de laisser passer le halo.
+
+### Le bandeau de résumé
+
+`SummaryStrip` affiche en haut de l'accueil enfant ce qu'il reste à faire, ce
+qui attend un parent, ce qui est en cours. Il **enroule**, il ne défile pas : la
+maquette montrait des cartes côte à côte, mais un défilement horizontal aurait
+caché le troisième repère sur un petit écran sans rien pour le signaler.
+
+Aucun de ces chiffres n'est une performance : ce sont des quantités de choses à
+faire ou en attente.
+
 ## Mobile d'abord
 
 - **Tout doit tenir en 320 px de large.** C'est la contrainte réelle, pas 375.
@@ -203,6 +267,11 @@ Ces interdits viennent du produit, pas du goût :
   progression, pas une monnaie ;
 - aucun bouton qui applique une sanction ou une récompense sans confirmation
   explicite.
+
+Cette liste tient même quand on emprunte une esthétique à un produit qui, lui,
+les affiche. « Halo » a repris le fond qui rayonne, les grands rayons et le
+dégradé ; il a laissé le niveau, l'expérience, la série de sept jours, les
+pièces et le classement.
 
 ## Accessibilité
 

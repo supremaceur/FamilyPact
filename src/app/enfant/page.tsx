@@ -1,11 +1,12 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ClaimTaskButton } from '@/components/child/claim-task-button';
+import { SummaryStrip } from '@/components/child/summary-strip';
 import { DashboardColumn, DashboardGrid, PageBody } from '@/components/layout/page-body';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
-import { ProgressBar } from '@/components/ui/progress';
+import { ProgressBar, ProgressRing } from '@/components/ui/progress';
 import { TASK_STATE_LABELS } from '@/domain/tasks';
 import { formatDateTime, formatTime } from '@/lib/format';
 import { requireChildActor } from '@/server/auth/context';
@@ -34,33 +35,65 @@ const ChildDashboardPage = async () => {
   const aQuelqueChoseADroite = data.activeSanctions.length > 0 || data.pendingTasks.length > 0;
 
   return (
-    <PageBody largeur="liste">
+    <PageBody largeur="liste" className="flex flex-col gap-5">
+      <SummaryStrip
+        reperes={[
+          {
+            cle: 'faire',
+            libelle: 'A faire',
+            valeur: data.todayTasks.length,
+            href: '/enfant/taches',
+            precision: data.todayTasks.length > 1 ? 'taches' : 'tache',
+          },
+          {
+            cle: 'attente',
+            libelle: "En attente d'un parent",
+            valeur: data.pendingTasks.length,
+            href: '/enfant/taches',
+            precision: data.pendingTasks.length > 1 ? 'transmises' : 'transmise',
+          },
+          {
+            cle: 'encours',
+            libelle: 'Sanctions en cours',
+            valeur: data.activeSanctions.length,
+            href: '/enfant/sanctions',
+            precision: data.activeSanctions.length > 1 ? 'en cours' : 'en cours',
+          },
+        ]}
+      />
+
       <DashboardGrid>
         <DashboardColumn>
+          {/* HALO — l'anneau est la piece centrale de l'espace enfant. Le score
+              reste ecrit en grand au centre, et le rappel chiffre le suit
+              toujours : un arc de cercle ne dit pas « combien il me reste ». */}
           <Card>
             <CardBody className="pt-6 text-center">
-              <p className="text-sm text-[var(--text-muted)]">Mon score</p>
-              <p className="tabular mt-1 text-5xl font-semibold">{data.score}</p>
-              <p className="text-sm text-[var(--text-muted)]">points</p>
-
               {data.nextReward === null ? (
-                <p className="mt-6 text-sm text-[var(--text-muted)]">
-                  Aucune recompense n&apos;est prevue pour l&apos;instant.
-                </p>
-              ) : (
-                <div className="mt-6 text-left">
-                  <p className="text-sm font-medium">
-                    Prochaine recompense : {data.nextReward.title}
+                <>
+                  <p className="text-sm text-[var(--text-muted)]">Mon score</p>
+                  <p className="tabular mt-1 text-5xl font-semibold">{data.score}</p>
+                  <p className="text-sm text-[var(--text-muted)]">points</p>
+                  <p className="mt-6 text-sm text-[var(--text-muted)]">
+                    Aucune recompense n&apos;est prevue pour l&apos;instant.
                   </p>
-                  <ProgressBar
-                    className="mt-2"
+                </>
+              ) : (
+                <>
+                  <ProgressRing
                     value={data.score}
                     max={data.nextReward.threshold}
                     label={`Progression vers ${data.nextReward.title}`}
+                    centre={data.score}
+                    legende="points"
                   />
-                  <div className="tabular mt-1.5 flex items-baseline justify-between text-sm">
+                  <p className="mt-4 font-medium">{data.nextReward.title}</p>
+                  <div className="tabular mt-1 flex items-baseline justify-center gap-2 text-sm">
                     <span className="text-[var(--text-muted)]">
                       {data.score} / {data.nextReward.threshold}
+                    </span>
+                    <span aria-hidden="true" className="text-[var(--text-muted)]">
+                      ·
                     </span>
                     <span className="font-medium">
                       {data.nextReward.remaining === 0
@@ -68,7 +101,7 @@ const ChildDashboardPage = async () => {
                         : `${data.nextReward.remaining} point${data.nextReward.remaining > 1 ? 's' : ''} restant${data.nextReward.remaining > 1 ? 's' : ''}`}
                     </span>
                   </div>
-                </div>
+                </>
               )}
             </CardBody>
           </Card>

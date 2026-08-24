@@ -164,6 +164,108 @@
     overscroll-behavior-y: none;
   }
 
+  /* =====================================================================
+     DIRECTION « HALO » — l'espace enfant, et lui seul.
+     =====================================================================
+
+     Tout passe par une redefinition de jetons sous `[data-espace='enfant']`.
+     Les composants ne changent pas : la meme `<Card>` rend une surface mate et
+     sobre cote parent, et une surface translucide posee sur un fond qui
+     rayonne cote enfant. C'est le benefice concret d'avoir tout passe par des
+     jetons — deux apparences, zero condition dans le code des composants.
+
+     POURQUOI DEUX ESPACES DIFFERENTS. Un enfant et un parent ne font pas la
+     meme chose ici. Le parent arbitre : son espace doit etre calme, dense,
+     lisible longtemps. L'enfant consulte et declare : son espace doit etre
+     accueillant et evident en une seconde. Et sur un telephone partage, on doit
+     savoir en un coup d'oeil dans lequel on se trouve.
+
+     CE QUE HALO N'APPORTE PAS. Aucun niveau, aucune barre d'experience, aucune
+     serie, aucune piece, aucun classement. L'esthetique est empruntee, les
+     mecaniques de jeu ne le sont pas : les points restent un reperage de
+     progression, jamais une monnaie. Voir docs/business-rules.md, section 7.
+  */
+  [data-espace='enfant'] {
+    /* Rayons plus genereux : c'est le premier signal, avant meme la couleur. */
+    --radius-card: 1.25rem;
+    --radius-control: 0.875rem;
+
+    /*
+     * Le fond rayonne au lieu d'etre plat. Deux halos : turquoise en haut a
+     * gauche, violet a droite. Le degrade est porte par la coquille et non par
+     * `body`, pour rester strictement borne a l'espace enfant.
+     */
+    background-color: var(--surface);
+    background-image: var(--halo-backdrop);
+    background-attachment: fixed;
+
+    --halo-backdrop:
+      radial-gradient(85% 52% at 6% -6%, oklch(0.925 0.058 200) 0%, transparent 64%),
+      radial-gradient(72% 46% at 100% 12%, oklch(0.94 0.045 320) 0%, transparent 60%);
+
+    /* Surfaces translucides : le halo transparait, les cartes flottent. */
+    --card-surface: linear-gradient(
+      180deg,
+      oklch(1 0 0 / 0.9) 0%,
+      oklch(0.995 0.003 250 / 0.86) 100%
+    );
+    --card-inset: inset 0 1px 0 oklch(1 0 0 / 0.9);
+    --card-ring: oklch(0.9 0.022 220);
+    --lead-ring: oklch(0.72 0.09 195);
+    --lead-glow: 0 0 0 1px oklch(0.72 0.09 195 / 0.35), 0 12px 30px oklch(0.65 0.11 195 / 0.16);
+
+    --accent: oklch(0.58 0.115 192);
+    --accent-gradient: linear-gradient(90deg, oklch(0.62 0.11 192), oklch(0.7 0.12 197));
+    --accent-ink: oklch(1 0 0);
+    --anneau-actif: oklch(0.66 0.11 194);
+    --anneau-vide: oklch(0.9 0.02 230);
+
+    /* Un cran plus grand que cote parent : lu de plus loin, plus vite. */
+    font-size: 1.0625rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) [data-espace='enfant'] {
+      --halo-backdrop:
+        radial-gradient(85% 52% at 6% -6%, oklch(0.35 0.078 200) 0%, transparent 64%),
+        radial-gradient(72% 46% at 100% 12%, oklch(0.3 0.078 320) 0%, transparent 60%);
+      --card-surface: linear-gradient(
+        180deg,
+        oklch(0.215 0.012 250 / 0.84) 0%,
+        oklch(0.185 0.012 255 / 0.84) 100%
+      );
+      --card-inset: inset 0 1px 0 oklch(1 0 0 / 0.05);
+      --card-ring: oklch(0.33 0.019 250);
+      --lead-ring: oklch(0.52 0.085 195);
+      --lead-glow: 0 0 0 1px oklch(0.6 0.11 195 / 0.24), 0 14px 34px oklch(0.6 0.12 195 / 0.14);
+      --accent: oklch(0.82 0.125 192);
+      --accent-gradient: linear-gradient(90deg, oklch(0.72 0.11 190), oklch(0.83 0.12 196));
+      --accent-ink: oklch(0.2 0.03 195);
+      --anneau-actif: oklch(0.8 0.12 194);
+      --anneau-vide: oklch(0.3 0.016 250);
+    }
+  }
+
+  :root[data-theme='dark'] [data-espace='enfant'] {
+    --halo-backdrop:
+      radial-gradient(85% 52% at 6% -6%, oklch(0.35 0.078 200) 0%, transparent 64%),
+      radial-gradient(72% 46% at 100% 12%, oklch(0.3 0.078 320) 0%, transparent 60%);
+    --card-surface: linear-gradient(
+      180deg,
+      oklch(0.215 0.012 250 / 0.84) 0%,
+      oklch(0.185 0.012 255 / 0.84) 100%
+    );
+    --card-inset: inset 0 1px 0 oklch(1 0 0 / 0.05);
+    --card-ring: oklch(0.33 0.019 250);
+    --lead-ring: oklch(0.52 0.085 195);
+    --lead-glow: 0 0 0 1px oklch(0.6 0.11 195 / 0.24), 0 14px 34px oklch(0.6 0.12 195 / 0.14);
+    --accent: oklch(0.82 0.125 192);
+    --accent-gradient: linear-gradient(90deg, oklch(0.72 0.11 190), oklch(0.83 0.12 196));
+    --accent-ink: oklch(0.2 0.03 195);
+    --anneau-actif: oklch(0.8 0.12 194);
+    --anneau-vide: oklch(0.3 0.016 250);
+  }
+
   /*
    * Focus toujours visible : c'est la condition d'utilisabilite au clavier.
    * On ne le supprime jamais, on le rend simplement coherent.
@@ -188,6 +290,25 @@
 }
 
 @layer components {
+  /*
+   * Anneau de progression de l'espace enfant.
+   *
+   * Le trou est perce par un masque plutot que couvert par un disque : il n'y a
+   * donc aucune couleur a faire correspondre avec la carte qui porte l'anneau,
+   * et la surface translucide continue de laisser passer le halo du fond. La
+   * part remplie arrive par `--anneau-part`, posee en style en ligne.
+   *
+   * Ecrit ici et non en style en ligne pour que le compilateur CSS prefixe
+   * `mask` la ou il le faut.
+   */
+  .anneau {
+    background: conic-gradient(
+      var(--anneau-actif) 0turn var(--anneau-part, 0turn),
+      var(--anneau-vide) var(--anneau-part, 0turn) 1turn
+    );
+    mask: radial-gradient(closest-side, transparent 67%, black 68%);
+  }
+
   /* Chiffres alignes : un score qui change ne fait pas sautiller la mise en page. */
   .tabular {
     font-variant-numeric: tabular-nums;
@@ -229,4 +350,38 @@
   background: var(--surface-raised);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-control);
+}
+
+/* ===========================================================================
+   HALO — les deux regles qui doivent ECRASER une classe utilitaire.
+   ===========================================================================
+
+   Volontairement HORS de toute `@layer`. Une regle sans couche l'emporte sur
+   toutes les regles en couche, quelle que soit leur specificite : place dans
+   `@layer base`, ce qui suit perdrait contre `bg-[var(--surface-raised)]` et
+   `bg-pact-600`, qui vivent dans `@layer utilities` — declaree apres.
+
+   C'est le seul endroit du projet ou une regle sort des couches. Tout le reste
+   de la direction « Halo » passe par des jetons, qui n'entrent en conflit avec
+   rien.
+   =========================================================================== */
+
+/*
+ * La coquille laisse passer le halo. Sans cela le degrade s'arreterait net au
+ * bord du rail lateral et sous l'en-tete : trois blocs opaques poses sur un fond
+ * qui rayonne, ce qui se voit immediatement.
+ *
+ * Cible par `data-chrome` plutot qu'en redefinissant `--surface-raised` : ce
+ * jeton habille aussi les boites de dialogue, qui doivent rester opaques.
+ */
+[data-espace='enfant'] [data-chrome] {
+  background-color: color-mix(in oklab, var(--surface-raised) 52%, transparent);
+  border-color: color-mix(in oklab, var(--card-ring) 70%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+/* Le bouton principal de l'espace enfant, en degrade. */
+[data-espace='enfant'] [data-variant='primary']:not(:disabled) {
+  background-image: var(--accent-gradient);
+  color: var(--accent-ink);
 }

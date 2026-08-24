@@ -17,8 +17,11 @@ export interface NavItem {
  * `lg`. La barre basse ne porte que cinq entrees : au-dela, les cibles
  * deviennent trop etroites pour un usage tactile confortable.
  *
- * L'espace parent et l'espace enfant partagent cette coquille mais affichent un
- * sous-titre distinct : on doit savoir immediatement ou l'on se trouve.
+ * L'espace parent et l'espace enfant partagent cette coquille mais pas son
+ * habillage : `data-espace` porte la distinction jusqu'a la feuille de style,
+ * ou l'espace enfant redefinit les jetons de surface (direction « Halo »).
+ * Aucun composant n'a besoin de savoir dans quel espace il est rendu — c'est ce
+ * qui permet aux memes cartes d'avoir deux apparences sans un `if` de plus.
  */
 export const AppShell = ({
   space,
@@ -38,8 +41,14 @@ export const AppShell = ({
   const notificationsHref = space === 'parent' ? '/parent/notifications' : '/enfant/notifications';
 
   return (
-    <div className="flex min-h-dvh flex-col lg:flex-row">
-      <aside className="hidden w-64 shrink-0 border-r border-[var(--border-subtle)] bg-[var(--surface-raised)] lg:flex lg:flex-col">
+    <div
+      data-espace={space === 'child' ? 'enfant' : 'parent'}
+      className="flex min-h-dvh flex-col lg:flex-row"
+    >
+      <aside
+        data-chrome="rail"
+        className="hidden w-64 shrink-0 border-r border-[var(--border-subtle)] bg-[var(--surface-raised)] lg:flex lg:flex-col"
+      >
         <div className="px-5 py-5">
           <Link href={space === 'parent' ? '/parent' : '/enfant'}>
             <Wordmark />
@@ -69,6 +78,7 @@ export const AppShell = ({
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header
+          data-chrome="entete"
           className={cn(
             'sticky top-0 z-10 border-b border-[var(--border-subtle)]',
             'bg-[var(--surface-raised)]/90 backdrop-blur',
@@ -109,6 +119,7 @@ export const AppShell = ({
 
         <nav
           aria-label="Navigation principale"
+          data-chrome="barre-basse"
           className="fixed inset-x-0 bottom-0 z-20 border-t border-[var(--border-subtle)] bg-[var(--surface-raised)]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
         >
           <ul className="mx-auto flex max-w-lg">

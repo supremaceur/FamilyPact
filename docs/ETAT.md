@@ -4,7 +4,7 @@
 > Il existe pour éviter de reparcourir le code afin de reconstruire un contexte
 > déjà écrit.
 
-**Dernière mise à jour** : 24 août 2026, 23 h
+**Dernière mise à jour** : 24 août 2026, 23 h 15
 
 ## En production
 
@@ -71,6 +71,15 @@ Et une correction sans rapport, trouvée en route :
    famille de test est à Paris. Entre 22 h UTC et minuit ils fabriquaient donc la
    veille : dix-neuf tests tombaient, uniquement le soir. Ils passent désormais
    par `toLocalDate(new Date(), family.timeZone)`.
+
+Enfin, l'espace enfant a son propre habillage :
+
+10. **Direction « Halo »**, appliquée au seul espace enfant : fond qui rayonne,
+    surfaces translucides, rayons agrandis, anneau de progression, bandeau de
+    résumé, bouton principal en dégradé. Portée par `data-espace` sur la
+    coquille : aucun composant ne sait dans quel espace il est rendu. L'espace
+    parent est inchangé. Aucune mécanique de jeu n'a été empruntée avec
+    l'esthétique — voir `interface.md`.
 
 ## Défauts connus
 
