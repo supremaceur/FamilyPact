@@ -177,6 +177,15 @@ src/
 
 ## Documentation
 
+Deux fichiers vivants, mis à jour au fil des évolutions :
+
+| Fichier                                | Rôle                                                                         |
+| -------------------------------------- | ---------------------------------------------------------------------------- |
+| [docs/ETAT.md](docs/ETAT.md)           | L'état du projet : ce qui est livré, en cours, cassé. **À lire en premier.** |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | Pourquoi les choix structurants ont été faits, et ce qu'ils coûtent          |
+
+Les documents ci-dessous sont des références, consultées au besoin :
+
 | Document                                         | Contenu                                                  |
 | ------------------------------------------------ | -------------------------------------------------------- |
 | [docs/architecture.md](docs/architecture.md)     | Choix techniques, décisions et leurs justifications      |
