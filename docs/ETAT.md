@@ -4,7 +4,7 @@
 > Il existe pour éviter de reparcourir le code afin de reconstruire un contexte
 > déjà écrit.
 
-**Dernière mise à jour** : 24 août 2026, 23 h 15
+**Dernière mise à jour** : 24 août 2026, 23 h 40
 
 ## En production
 
@@ -95,17 +95,24 @@ Aucun défaut ouvert à ce jour.
 
 ## Points d'attention
 
-- **Deux migrations attendent d'être appliquées en production.** Le code de la
-  branche a été promu sur `family-pact-virid.vercel.app` sans que
-  `prisma migrate deploy` ait été exécuté. Tant que ce n'est pas fait,
-  `/parent/validations` et `/parent/recompenses` échoueront : le code attend des
-  colonnes et des valeurs d'énumération qui n'existent pas encore.
+- **Les quatre migrations sont appliquées en production** (vérifié le 24 août à
+  23 h 40). Les deux dernières l'ont été **à la main**, par l'API Supabase, et
+  non par `prisma migrate deploy` : la production servait déjà le code de la
+  branche et toutes les pages connectées tombaient.
 
-  ```bash
-  # connexion DIRECTE, port 5432 — le pooler ne supporte pas le DDL
-  DATABASE_URL="postgresql://…@db.<ref>.supabase.co:5432/postgres" \
-    npx prisma migrate deploy
-  ```
+  Le suivi de Prisma a été écrit dans la foulée, avec les empreintes SHA-256 des
+  fichiers de migration — les mêmes que celles que Prisma aurait calculées, ce
+  qui a été vérifié en comparant avec les deux lignes existantes. **Un futur
+  `prisma migrate deploy` ne rejouera donc rien.**
+
+  Le DDL appliqué portait des gardes `IF NOT EXISTS` que les fichiers de
+  migration n'ont pas : c'était pour pouvoir réessayer sans risque en cas
+  d'échec partiel. Les fichiers restent tels que Prisma les a produits — ce
+  sont eux qui font foi pour une base neuve et pour la CI.
+
+  Leçon pour la suite : **un déploiement Vercel n'applique aucune migration**.
+  `npm run build` fait `prisma generate && next build`, rien de plus. Toute
+  promotion en production doit être précédée de `prisma migrate deploy`.
 
 - **La clé `service_role` Supabase doit être révoquée.** Elle a été transmise en
   clair dans une conversation. Ses privilèges sur les tables sont retirés, mais
