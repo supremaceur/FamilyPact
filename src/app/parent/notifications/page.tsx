@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { PageBody } from '@/components/layout/page-body';
 import { NotificationList } from '@/components/notifications/notification-list';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -13,7 +14,7 @@ const ParentNotificationsPage = async () => {
   const notifications = await getNotifications(actor);
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <PageBody largeur="liste">
       <Card>
         <CardHeader title="Notifications" />
         <CardBody className="pt-0">
@@ -33,7 +34,7 @@ const ParentNotificationsPage = async () => {
           )}
         </CardBody>
       </Card>
-    </div>
+    </PageBody>
   );
 };
 

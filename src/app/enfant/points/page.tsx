@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { PageBody } from '@/components/layout/page-body';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { formatDateTime } from '@/lib/format';
@@ -41,7 +42,7 @@ const ChildPointsPage = async ({
   ]);
 
   return (
-    <div className="mx-auto flex max-w-xl flex-col gap-6">
+    <PageBody largeur="liste" className="flex flex-col gap-6">
       <Card>
         <CardBody className="pt-6 text-center">
           <p className="text-sm text-[var(--text-muted)]">Mon score</p>
@@ -107,7 +108,7 @@ const ChildPointsPage = async ({
           )}
         </CardBody>
       </Card>
-    </div>
+    </PageBody>
   );
 };
 

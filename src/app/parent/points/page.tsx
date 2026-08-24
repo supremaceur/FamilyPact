@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { PageBody } from '@/components/layout/page-body';
 import { ParentPermission } from '@/generated/prisma/enums';
 import { AdjustPointsForm } from '@/components/parent/adjust-points-form';
 import { LedgerTable } from '@/components/parent/ledger-table';
@@ -35,7 +36,7 @@ const PointsPage = async ({
   ]);
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-6">
+    <PageBody largeur="liste" className="flex flex-col gap-6">
       <Card>
         <CardHeader
           title="Soldes"
@@ -117,7 +118,7 @@ const PointsPage = async ({
           )}
         </CardBody>
       </Card>
-    </div>
+    </PageBody>
   );
 };
 

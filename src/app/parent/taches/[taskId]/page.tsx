@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { PageBody } from '@/components/layout/page-body';
 import { TASK_STATE_LABELS } from '@/domain/tasks';
 import { ParentPermission } from '@/generated/prisma/enums';
 import { TaskForm } from '@/components/parent/task-form';
@@ -33,7 +34,7 @@ const TaskDetailPage = async ({ params }: { readonly params: Promise<{ taskId: s
   const canManage = hasCapability(actor, ParentPermission.TASK_MANAGE);
 
   return (
-    <div className="mx-auto flex max-w-xl flex-col gap-6">
+    <PageBody largeur="lecture" className="flex flex-col gap-6">
       {canManage && (
         <Card>
           <CardHeader title="Modifier la tache" description={`Version ${task.version}`} />
@@ -114,7 +115,7 @@ const TaskDetailPage = async ({ params }: { readonly params: Promise<{ taskId: s
           )}
         </CardBody>
       </Card>
-    </div>
+    </PageBody>
   );
 };
 

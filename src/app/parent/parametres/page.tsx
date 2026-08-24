@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { PageBody } from '@/components/layout/page-body';
 import { ParentPermission } from '@/generated/prisma/enums';
 import { FamilySettingsForm } from '@/components/parent/family-settings-form';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
@@ -11,7 +12,7 @@ const SettingsPage = async () => {
   const actor = await requireParentActor();
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-6">
+    <PageBody largeur="lecture" className="flex flex-col gap-6">
       <Card>
         <CardHeader title="Parametres de la famille" />
         <CardBody>
@@ -43,7 +44,7 @@ const SettingsPage = async () => {
           </ul>
         </CardBody>
       </Card>
-    </div>
+    </PageBody>
   );
 };
 

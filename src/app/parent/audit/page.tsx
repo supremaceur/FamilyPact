@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { PageBody } from '@/components/layout/page-body';
 import { AuditAction, ParentPermission } from '@/generated/prisma/enums';
 import { Alert } from '@/components/ui/alert';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
@@ -38,12 +39,12 @@ const AuditPage = async ({
   const actor = await requireParentActor();
   if (!hasCapability(actor, ParentPermission.AUDIT_VIEW)) {
     return (
-      <div className="mx-auto max-w-2xl">
+      <PageBody largeur="liste">
         <Alert tone="info" title="Acces restreint">
           Vous n&apos;avez pas la permission de consulter le journal d&apos;audit. Le proprietaire
           de la famille peut vous l&apos;accorder.
         </Alert>
-      </div>
+      </PageBody>
     );
   }
 

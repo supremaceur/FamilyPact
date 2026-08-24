@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { DashboardColumn, DashboardGrid, PageBody } from '@/components/layout/page-body';
 import { ParentPermission, TaskOccurrenceState } from '@/generated/prisma/enums';
 import { ChildProfileForm } from '@/components/parent/child-profile-form';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
@@ -80,7 +81,7 @@ const ChildDetailPage = async ({
   );
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-6">
+    <PageBody largeur="tableauDeBord" className="flex flex-col gap-5">
       <Card>
         <CardBody className="pt-5">
           <p className="text-sm text-[var(--text-muted)]">{child.user.displayName}</p>
@@ -117,76 +118,87 @@ const ChildDetailPage = async ({
         </CardBody>
       </Card>
 
-      {activeSanctions.length > 0 && (
-        <Card>
-          <CardHeader title="Sanctions en cours" />
-          <CardBody className="pt-0">
-            <ul className="divide-y divide-[var(--border-subtle)]">
-              {activeSanctions.map((sanction) => (
-                <li key={sanction.id} className="py-3 text-sm">
-                  <p className="font-medium">{sanction.titleSnapshot}</p>
-                  <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-                    {sanction.status === 'LIFT_ELIGIBLE'
-                      ? 'Condition de levee atteinte — validation requise'
-                      : 'Active'}
-                    {sanction.liftScoreThreshold !== null && (
-                      <> · levee a {sanction.liftScoreThreshold} points</>
-                    )}
-                    {sanction.liftAt !== null && (
-                      <> · fin prevue le {formatDateTime(sanction.liftAt, actor.timeZone)}</>
-                    )}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          </CardBody>
-        </Card>
-      )}
+      <DashboardGrid>
+        {/* A gauche ce que l'enfant a fait, a droite ce qui le concerne
+            en ce moment et le reglage de son profil. */}
+        <DashboardColumn>
+          <Card>
+            <CardHeader title="Taches recentes" />
+            <CardBody className="pt-0">
+              {recentOccurrences.length === 0 ? (
+                <EmptyState title="Aucune tache pour le moment" />
+              ) : (
+                <ul className="divide-y divide-[var(--border-subtle)]">
+                  {recentOccurrences.map((occurrence) => (
+                    <li
+                      key={occurrence.id}
+                      className="flex items-center justify-between gap-3 py-2.5"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm">{occurrence.titleSnapshot}</p>
+                        <p className="text-xs text-[var(--text-muted)]">
+                          {formatDateTime(occurrence.dueAt, actor.timeZone)}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-xs text-[var(--text-muted)]">
+                        {occurrence.state === TaskOccurrenceState.APPROVED
+                          ? `+${occurrence.pointsAwardSnapshot}`
+                          : occurrence.state === TaskOccurrenceState.MISSED_CONFIRMED
+                            ? `−${occurrence.pointsPenaltySnapshot}`
+                            : '—'}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardBody>
+          </Card>
+        </DashboardColumn>
 
-      <Card>
-        <CardHeader title="Taches recentes" />
-        <CardBody className="pt-0">
-          {recentOccurrences.length === 0 ? (
-            <EmptyState title="Aucune tache pour le moment" />
-          ) : (
-            <ul className="divide-y divide-[var(--border-subtle)]">
-              {recentOccurrences.map((occurrence) => (
-                <li key={occurrence.id} className="flex items-center justify-between gap-3 py-2.5">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm">{occurrence.titleSnapshot}</p>
-                    <p className="text-xs text-[var(--text-muted)]">
-                      {formatDateTime(occurrence.dueAt, actor.timeZone)}
-                    </p>
-                  </div>
-                  <span className="shrink-0 text-xs text-[var(--text-muted)]">
-                    {occurrence.state === TaskOccurrenceState.APPROVED
-                      ? `+${occurrence.pointsAwardSnapshot}`
-                      : occurrence.state === TaskOccurrenceState.MISSED_CONFIRMED
-                        ? `−${occurrence.pointsPenaltySnapshot}`
-                        : '—'}
-                  </span>
-                </li>
-              ))}
-            </ul>
+        <DashboardColumn>
+          {activeSanctions.length > 0 && (
+            <Card>
+              <CardHeader title="Sanctions en cours" />
+              <CardBody className="pt-0">
+                <ul className="divide-y divide-[var(--border-subtle)]">
+                  {activeSanctions.map((sanction) => (
+                    <li key={sanction.id} className="py-3 text-sm">
+                      <p className="font-medium">{sanction.titleSnapshot}</p>
+                      <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                        {sanction.status === 'LIFT_ELIGIBLE'
+                          ? 'Condition de levee atteinte — validation requise'
+                          : 'Active'}
+                        {sanction.liftScoreThreshold !== null && (
+                          <> · levee a {sanction.liftScoreThreshold} points</>
+                        )}
+                        {sanction.liftAt !== null && (
+                          <> · fin prevue le {formatDateTime(sanction.liftAt, actor.timeZone)}</>
+                        )}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </CardBody>
+            </Card>
           )}
-        </CardBody>
-      </Card>
 
-      {hasCapability(actor, ParentPermission.CHILD_MANAGE) && (
-        <Card>
-          <CardHeader title="Profil" />
-          <CardBody>
-            <ChildProfileForm
-              childMembershipId={child.id}
-              displayName={child.user.displayName}
-              avatarKey={child.childProfile?.avatarKey ?? 'fox'}
-              colorKey={child.childProfile?.colorKey ?? 'sage'}
-              canDelete
-            />
-          </CardBody>
-        </Card>
-      )}
-    </div>
+          {hasCapability(actor, ParentPermission.CHILD_MANAGE) && (
+            <Card>
+              <CardHeader title="Profil" />
+              <CardBody>
+                <ChildProfileForm
+                  childMembershipId={child.id}
+                  displayName={child.user.displayName}
+                  avatarKey={child.childProfile?.avatarKey ?? 'fox'}
+                  colorKey={child.childProfile?.colorKey ?? 'sage'}
+                  canDelete
+                />
+              </CardBody>
+            </Card>
+          )}
+        </DashboardColumn>
+      </DashboardGrid>
+    </PageBody>
   );
 };
 

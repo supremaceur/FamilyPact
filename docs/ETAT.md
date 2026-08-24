@@ -4,7 +4,7 @@
 > Il existe pour éviter de reparcourir le code afin de reconstruire un contexte
 > déjà écrit.
 
-**Dernière mise à jour** : 24 août 2026, 21 h
+**Dernière mise à jour** : 24 août 2026, 22 h
 
 ## En production
 
@@ -32,7 +32,7 @@
 
 ## En cours
 
-**PR #5 — second type de refus** (`claude/refus-avec-retrait`) — prête à fusionner
+**PR #5 — second type de refus + direction « Ardoise »** (`claude/refus-avec-retrait`) — prête à fusionner
 
 Trois choses liées dans la même livraison :
 
@@ -45,17 +45,28 @@ Trois choses liées dans la même livraison :
    préexistant, rendu atteignable par le refus avec retrait, trouvé par le test
    d'intégration. Voir `DECISIONS.md` D-007.
 
+Puis l'habillage demandé, direction « Ardoise » :
+
+4. **Largeur centralisée** : `PageBody` remplace vingt-deux `max-w-*` codés en
+   dur. Trois largeurs seulement, choisies par ce que la page contient.
+5. **Colonnes** : onze écrans répartissent désormais leur contenu en deux
+   colonnes à partir de `xl` au lieu de l'empiler dans un couloir. Voir le
+   tableau de répartition dans `interface.md`.
+6. **Liseré teal sur tous les conteneurs**, plus marqué sur ce qui attend une
+   décision. Relief porté par des jetons (`--card-ring`, `--card-surface`,
+   `--card-inset`, `--app-backdrop`), donc modifiable en un point.
+
 ## Défauts connus
 
 Aucun défaut ouvert à ce jour.
 
 ## Demandes en attente
 
-| Demande                                    | Note                                                                                                                                                                                   |
-| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Rafraîchissement périodique de l'interface | Choix retenu : interrogation périodique (`router.refresh()` toutes les 15–20 s + au retour de focus). **Pas** Supabase Realtime — voir `DECISIONS.md`.                                 |
-| Révocation d'une récompense accordée       | Quand le score repasse sous le seuil qui l'avait déclenchée. Proposition, jamais automatique.                                                                                          |
-| Habillage visuel des écrans                | Très sobre, et vide sur grand écran : le contenu reste dans une colonne étroite centrée. Direction souhaitée : sobre, tech/futuriste. Propositions à valider avant toute modification. |
+| Demande                                    | Note                                                                                                                                                   |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Rafraîchissement périodique de l'interface | Choix retenu : interrogation périodique (`router.refresh()` toutes les 15–20 s + au retour de focus). **Pas** Supabase Realtime — voir `DECISIONS.md`. |
+| Révocation d'une récompense accordée       | Quand le score repasse sous le seuil qui l'avait déclenchée. Proposition, jamais automatique.                                                          |
+| Habillage visuel des écrans                | ✅ Fait — direction « Ardoise » retenue, appliquée aux 22 pages. Vérifié en clair et en sombre, à 1440 px et à 412 px.                                 |
 
 ## Points d'attention
 

@@ -12,6 +12,11 @@ import { cn } from '@/lib/cn';
  * La surface est un degrade tres court plutot qu'un aplat, avec un filet clair
  * en haut (`--card-inset`). C'est ce qui pose la carte sur le fond au lieu de
  * l'y decouper.
+ *
+ * Toutes les cartes portent une bordure teintee vers le teal (`--card-ring`),
+ * pas un gris neutre : elles appartiennent ainsi a la meme famille que
+ * l'accent. Le lisere `lead` reste nettement plus marque — sinon il ne
+ * designerait plus rien.
  */
 export const Card = ({
   tone = 'default',
@@ -28,7 +33,7 @@ export const Card = ({
       'bg-[image:var(--card-surface)]',
       tone === 'lead'
         ? 'border-[var(--lead-ring)] shadow-[var(--card-inset),var(--lead-glow)]'
-        : 'border-[var(--border-subtle)] shadow-[var(--card-inset),var(--shadow-soft)]',
+        : 'border-[var(--card-ring)] shadow-[var(--card-inset),var(--shadow-soft)]',
       className,
     )}
     {...rest}

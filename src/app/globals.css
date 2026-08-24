@@ -89,8 +89,16 @@
       radial-gradient(90% 70% at 100% 0%, oklch(0.975 0.006 85) 0%, transparent 55%);
     --card-surface: linear-gradient(180deg, oklch(1 0 0) 0%, oklch(0.985 0.003 85) 100%);
     --card-inset: inset 0 1px 0 oklch(1 0 0 / 0.8);
+    /*
+     * Bordure de carte teintee vers le teal plutot qu'un gris neutre. La
+     * difference est a peine nommable et pourtant elle se voit : les cartes
+     * appartiennent visiblement a la meme famille que l'accent, au lieu d'etre
+     * posees dessus. Reste tres en dessous du lisere `lead`, qui doit continuer
+     * de se distinguer.
+     */
+    --card-ring: oklch(0.875 0.028 178);
     --lead-ring: var(--color-pact-300);
-    --lead-glow: 0 0 0 1px var(--color-pact-200), 0 12px 28px oklch(0.5 0.05 177 / 0.14);
+    --lead-glow: 0 0 0 1px var(--color-pact-300), 0 12px 28px oklch(0.5 0.05 177 / 0.16);
     --text-primary: var(--color-sand-900);
     --text-secondary: var(--color-sand-700);
     --text-muted: var(--color-sand-600);
@@ -128,8 +136,9 @@
         radial-gradient(90% 70% at 100% 0%, oklch(0.19 0.016 86) 0%, transparent 55%);
       --card-surface: linear-gradient(180deg, oklch(0.225 0.009 85) 0%, oklch(0.195 0.008 86) 100%);
       --card-inset: inset 0 1px 0 oklch(1 0 0 / 0.035);
-      --lead-ring: oklch(0.38 0.05 177);
-      --lead-glow: 0 0 0 1px oklch(0.3 0.04 177), 0 14px 34px oklch(0 0 0 / 0.4);
+      --card-ring: oklch(0.365 0.033 178);
+      --lead-ring: oklch(0.48 0.078 177);
+      --lead-glow: 0 0 0 1px oklch(0.36 0.055 177), 0 14px 34px oklch(0 0 0 / 0.4);
     }
   }
 

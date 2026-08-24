@@ -85,9 +85,40 @@ répartissent l'information au lieu de l'empiler.
 décision à gauche, le contexte à droite. En dessous, une seule colonne — l'ordre
 du DOM est donc aussi l'ordre de lecture au clavier et au lecteur d'écran.
 
+**`tableauDeBord` sans grille est une erreur.** Une carte unique étirée sur
+84 rem est pire que la colonne étroite qu'elle remplace : la ligne devient
+illisible et la carte flotte. La règle est donc : `tableauDeBord` seulement si
+la page a effectivement de quoi remplir deux colonnes. Une page à une seule
+carte reste en `liste` — c'est le cas de `/parent/taches` et
+`/enfant/sanctions`.
+
+Quand la colonne de droite dépend d'un droit, c'est la grille entière qui est
+conditionnelle, pas seulement son contenu : `/parent/enfants` et
+`/parent/membres` repassent en `liste` pour un parent sans droit de gestion,
+plutôt que de réserver une piste vide à droite.
+
+Répartition retenue :
+
+| Page                   | Colonne de gauche          | Colonne de droite               |
+| ---------------------- | -------------------------- | ------------------------------- |
+| `/parent`              | Actions requises, enfants  | Fonctionnement, raccourcis      |
+| `/parent/validations`  | Tâches déclarées terminées | Tâches non réalisées            |
+| `/parent/recompenses`  | Récompenses proposées      | Historique des paliers          |
+| `/parent/sanctions`    | Proposées, en cours        | Historique                      |
+| `/parent/regles`       | Paliers, règles            | Les deux formulaires d'ajout    |
+| `/parent/enfants`      | Les enfants                | Inviter, invitations            |
+| `/parent/membres`      | Les membres                | Inviter, invitations            |
+| `/parent/enfants/[id]` | Tâches récentes            | Sanctions en cours, profil      |
+| `/enfant`              | Score, à faire             | En attente, historique          |
+| `/enfant/taches`       | À faire                    | En attente, récemment terminées |
+| `/enfant/recompenses`  | Prochaine récompense       | Récompenses obtenues            |
+
+Sur `/parent/enfants/[id]`, la carte de score reste pleine largeur au-dessus de
+la grille : c'est l'en-tête de la page, pas une colonne.
+
 ## Le relief : direction « Ardoise »
 
-Les surfaces sont posées sur le fond, pas découpées dedans. Trois moyens, tous
+Les surfaces sont posées sur le fond, pas découpées dedans. Cinq moyens, tous
 portés par des jetons :
 
 | Jeton            | Effet                                                                                                  |
@@ -95,15 +126,25 @@ portés par des jetons :
 | `--app-backdrop` | Deux halos très faibles sur le fond de page, teintés vers le teal du pacte plutôt que vers un gris pur |
 | `--card-surface` | Un dégradé très court sur les cartes, au lieu d'un aplat                                               |
 | `--card-inset`   | Un filet clair d'un pixel en haut de chaque carte                                                      |
+| `--card-ring`    | Le liseré de **toutes** les cartes : un gris teinté vers le teal, pas un gris neutre                   |
+| `--lead-ring`    | Le même liseré, assumé, pour la carte qui attend une décision                                          |
 
-`<Card tone="lead">` ajoute un liseré teal et une ombre plus marquée. Il désigne
-**la** carte qui attend une décision : sur un tableau de bord où tout se
+Le liseré teal est sur tous les conteneurs, pas seulement sur celui qui appelle
+une action : les cartes appartiennent visiblement à la même famille que
+l'accent, au lieu d'être posées dessus. La différence entre `--card-ring` et
+`--lead-ring` est une différence d'intensité, pas de nature — c'est ce qui
+permet de la lire comme une hiérarchie et non comme deux couleurs.
+
+`<Card tone="lead">` ajoute donc le liseré assumé et une ombre plus marquée. Il
+désigne ce qui attend une décision : sur un tableau de bord où tout se
 ressemble, l'œil doit trouver sans lire.
 
-Deux règles à tenir : **une seule carte `lead` par écran** — deux accents ne
-désignent plus rien — et le liseré ne s'allume que s'il y a effectivement
-quelque chose à décider. Un accent permanent cesse d'attirer l'œil au bout d'un
-jour.
+Une règle à tenir : **le liseré ne s'allume que s'il y a effectivement quelque
+chose à décider** — `tone={file.length > 0 ? 'lead' : 'default'}`. Un accent
+permanent cesse d'attirer l'œil au bout d'un jour. Un écran qui n'est _que_ file
+d'attente peut en porter deux (c'est le cas de `/parent/validations`, dont les
+deux colonnes sont deux files) ; partout ailleurs, une seule, sans quoi l'accent
+ne désigne plus rien.
 
 ## Mobile d'abord
 

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { PageBody } from '@/components/layout/page-body';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { formatDateTime } from '@/lib/format';
@@ -45,7 +46,7 @@ const HistoryPage = async ({
     childId === null ? '/parent/historique' : `/parent/historique?enfant=${childId}`;
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <PageBody largeur="liste">
       <Card>
         <CardHeader
           title="Historique"
@@ -143,7 +144,7 @@ const HistoryPage = async ({
           )}
         </CardBody>
       </Card>
-    </div>
+    </PageBody>
   );
 };
 
