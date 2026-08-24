@@ -127,7 +127,12 @@ le seed refuse de s'exécuter en production.
 
 Les jobs sont également exposés en HTTP sur `/api/jobs/run`, en `GET` comme en `POST`,
 avec `x-familipact-job-token` ou `Authorization: Bearer`. Sur Vercel, `CRON_SECRET` doit
-valoir exactement `JOB_RUNNER_TOKEN`. Voir [docs/deployment.md](docs/deployment.md).
+valoir exactement `JOB_RUNNER_TOKEN`.
+
+`vercel.json` planifie une exécution **quotidienne** (`0 19 * * *`, UTC) : le plan _Hobby_
+n'en autorise pas davantage et fait échouer le déploiement au-delà. Aucun job ne raisonne
+sur une fenêtre glissante, donc un pas plus large n'égare rien — il retarde seulement la
+détection des échéances. Voir [docs/deployment.md](docs/deployment.md).
 
 ### Outils
 

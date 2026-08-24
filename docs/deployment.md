@@ -127,10 +127,26 @@ heure est sans effet.
 | `evaluate-rules`       | Réévalue paliers et conditions de levée à base de date                |
 | `purge-expired`        | Nettoie sessions, défis et compteurs expirés                          |
 
-### Fréquence recommandée : toutes les heures
+### Fréquence des exécutions
 
-C'est le pas de la clé d'idempotence. Plus fréquent serait sans effet ; moins fréquent
-retarderait la détection des échéances.
+**Le pas naturel est l'heure**, parce que c'est la granularité de la clé d'idempotence
+(`hourlyRunKey` découpe le temps par heure entamée). Plus fréquent serait donc sans effet :
+le second appel de la même heure est refusé par la contrainte unique `(jobName, runKey)`
+et se termine sans rien faire.
+
+**Moins fréquent est sûr, mais plus lent.** Aucun job ne raisonne sur une fenêtre
+glissante, donc espacer les exécutions ne perd jamais rien :
+
+| Job                    | Pourquoi un pas plus large ne perd rien                                              |
+| ---------------------- | ------------------------------------------------------------------------------------ |
+| `generate-occurrences` | Matérialise à 30 jours (`OCCURRENCE_HORIZON_DAYS`) — très au-delà d'un pas quotidien |
+| `detect-missed`        | Filtre sur `dueAt < now`, **sans borne inférieure** : tout retard est rattrapé       |
+| `evaluate-rules`       | Réévalue tous les enfants à chaque passage, sans mémoire du passage précédent        |
+| `purge-expired`        | Supprime sur `expiresAt < now` — la donnée expirée reste refusée entre-temps         |
+
+Ce qui change avec un pas quotidien est donc uniquement la **latence de détection** :
+une échéance dépassée à 8 h n'apparaît dans « Actions requises » qu'à l'exécution
+suivante. Rien n'est jamais retiré automatiquement, quel qu'en soit le délai.
 
 ### Déclenchement HTTP
 
@@ -158,8 +174,29 @@ Adapté aux plateformes serverless (Vercel Cron, Cloud Scheduler, GitHub Actions
 `vercel.json` est déjà versionné :
 
 ```json
-{ "crons": [{ "path": "/api/jobs/run", "schedule": "0 * * * *" }] }
+{ "crons": [{ "path": "/api/jobs/run", "schedule": "0 19 * * *" }] }
 ```
+
+**Pourquoi quotidien et non horaire.** Le plan _Hobby_ de Vercel n'autorise qu'une
+exécution par jour ; une expression plus fréquente ne dégrade pas le service, elle fait
+**échouer le déploiement entier** :
+
+```
+Hobby accounts are limited to daily cron jobs.
+This cron expression (0 * * * *) would run more than once per day.
+```
+
+`0 19 * * *` est en **UTC** — Vercel n'interprète jamais autre chose. Cela place
+l'exécution à 21 h à Paris l'été, 20 h l'hiver : en fin de journée, après la plupart des
+échéances, avant que les parents ne referment l'application.
+
+Pour revenir à un pas horaire, deux voies :
+
+1. **Plan Pro** — remettre `"0 * * * *"` dans `vercel.json`, rien d'autre à changer.
+2. **Ordonnanceur externe** — laisser Vercel de côté et appeler la route depuis un cron
+   système, un conteneur, une planification GitHub Actions ou un service tiers. La route
+   est publique et protégée par jeton : n'importe quel ordonnanceur capable d'émettre un
+   `GET` avec un en-tête suffit.
 
 Vercel Cron n'émet que des `GET` et ne sait pas ajouter d'en-tête personnalisé : il
 joint `Authorization: Bearer $CRON_SECRET`. Il faut donc définir **deux** variables
@@ -341,18 +378,19 @@ absorbe la concurrence.
 `vercel.json` :
 
 ```json
-{ "crons": [{ "path": "/api/jobs/run", "schedule": "0 * * * *" }] }
+{ "crons": [{ "path": "/api/jobs/run", "schedule": "0 19 * * *" }] }
 ```
 
-Le cron Vercel n'envoie pas d'en-tete personnalise. Deux options :
+Vercel Cron n'envoie pas d'en-tête personnalisé, mais la route reconnaît aussi
+`Authorization: Bearer` : il suffit donc de définir `CRON_SECRET` avec la même valeur
+que `JOB_RUNNER_TOKEN`. Aucun cron externe ni route intermédiaire n'est nécessaire.
 
-- exposer le declenchement via un cron externe qui, lui, envoie
-  `x-familipact-job-token` ;
-- ou faire appeler `/api/jobs/run` par une route intermediaire qui ajoute
-  l'en-tete cote serveur.
+Le pas est **quotidien** parce que le plan _Hobby_ refuse plus d'une exécution par jour
+et fait échouer le déploiement au-delà. Voir [Fréquence des exécutions](#fréquence-des-exécutions)
+pour ce que cela change (de la latence, jamais de perte) et comment revenir à l'horaire.
 
-La route refuse tout appel sans jeton valide : c'est volontaire, un
-ordonnanceur non authentifie ne doit pas pouvoir declencher les jobs.
+La route refuse tout appel sans jeton valide : c'est volontaire, un ordonnanceur non
+authentifié ne doit pas pouvoir déclencher les jobs.
 
 ### Points d'attention
 
@@ -445,7 +483,7 @@ Double garde-fou : il crée des comptes aux mots de passe connus.
 - [ ] `NODE_ENV=production`
 - [ ] `ALLOW_DEV_SEED` **absente**
 - [ ] `npx prisma migrate deploy` exécuté
-- [ ] Jobs planifiés toutes les heures, et leur exécution supervisée
+- [ ] Jobs planifiés (horaire si le plan le permet, quotidien sinon) et leur exécution supervisée
 - [ ] Sauvegarde de la base **et** des clés de chiffrement, dans des coffres distincts
 - [ ] Restauration testée au moins une fois
 - [ ] HTTPS actif, HSTS vérifié
