@@ -17,8 +17,10 @@ import {
   detectMissedOccurrences,
   ignoreMissedOccurrence,
   rejectOccurrence,
+  rejectOccurrenceWithPenalty,
 } from '@/server/services/task-occurrences';
 import { adjustPoints, reversePointTransaction } from '@/server/services/point-adjustments';
+import { getFamilyTimeline } from '@/server/queries/history';
 import { addChild, addParent, cachedBalance, createFamily, ledgerBalance } from './helpers';
 import type { FamilyActor } from '@/server/auth/context';
 
@@ -478,5 +480,81 @@ describe('immuabilite du ledger au niveau de la base', () => {
         },
       }),
     ).rejects.toThrow();
+  });
+});
+
+describe('Cas K — les deux refus', () => {
+  it("refuse sans rien retirer, et la decision reste visible dans l'historique", async () => {
+    await seedBalance(100);
+    const occurrenceId = await createTodayTask({ award: 20, penalty: 10 });
+    await claimOccurrenceDone(child.actor, occurrenceId);
+
+    const result = await rejectOccurrence(owner, occurrenceId, 'La chambre est encore en desordre');
+
+    expect(result.state).toBe(TaskOccurrenceState.REJECTED);
+    expect(await ledgerBalance(family.familyId, child.membershipId)).toBe(100);
+    expect(await prisma.pointTransaction.count({ where: { sourceId: occurrenceId } })).toBe(0);
+
+    // Le defaut d'origine : aucune ecriture au registre, donc la decision
+    // n'apparaissait dans aucun historique. Elle doit desormais y figurer, des
+    // deux cotes, avec son motif.
+    for (const acteur of [owner, child.actor]) {
+      const chronologie = await getFamilyTimeline(acteur, {
+        childMembershipId: null,
+        cursor: null,
+      });
+      const refus = chronologie.items.find((entree) => entree.kind === 'DECISION');
+      expect(refus, `refus absent de la chronologie de ${acteur.role}`).toBeDefined();
+      expect(refus!.reason).toBe('La chambre est encore en desordre');
+    }
+  });
+
+  it('refuse avec le retrait configure sur la tache, et une seule fois', async () => {
+    await seedBalance(100);
+    const occurrenceId = await createTodayTask({ award: 20, penalty: 10 });
+    await claimOccurrenceDone(child.actor, occurrenceId);
+
+    const result = await rejectOccurrenceWithPenalty(owner, occurrenceId, 'Tache non faite');
+
+    expect(result.state).toBe(TaskOccurrenceState.REJECTED);
+    expect(result.balanceBefore).toBe(100);
+    expect(result.balanceAfter).toBe(90);
+
+    const mouvements = await prisma.pointTransaction.findMany({
+      where: { sourceId: occurrenceId },
+    });
+    expect(mouvements).toHaveLength(1);
+    expect(mouvements[0]!.delta).toBe(-10);
+    // Un refus n'est pas une echeance laissee passer : le type doit les separer.
+    expect(mouvements[0]!.type).toBe(PointTransactionType.TASK_REJECTED);
+    expect(mouvements[0]!.sourceType).toBe(PointTransactionSource.TASK_OCCURRENCE);
+
+    // La tache redevient declarable ; un second refus avec retrait ne doit PAS
+    // retirer une seconde fois. La garantie est portee par l'index unique
+    // (sourceType, sourceId, type), pas par une verification applicative.
+    await claimOccurrenceDone(child.actor, occurrenceId);
+    await rejectOccurrenceWithPenalty(owner, occurrenceId, 'Toujours pas faite');
+
+    expect(
+      await prisma.pointTransaction.count({
+        where: { sourceId: occurrenceId, type: PointTransactionType.TASK_REJECTED },
+      }),
+    ).toBe(1);
+    expect(await ledgerBalance(family.familyId, child.membershipId)).toBe(90);
+    expect(await cachedBalance(child.membershipId)).toBe(90);
+  });
+
+  it("ne refuse pas une tache qui n'a pas ete declaree terminee", async () => {
+    const occurrenceId = await createTodayTask({ award: 20, penalty: 10 });
+
+    // La garde d'etat ne leve pas : elle rend `alreadyDecided`, pour que
+    // l'interface affiche un message honnete plutot qu'une erreur en cas de
+    // double clic ou de decision concurrente.
+    const resultat = await rejectOccurrenceWithPenalty(owner, occurrenceId);
+    expect(resultat.alreadyDecided).toBe(true);
+    expect(resultat.state).toBe(TaskOccurrenceState.TODO);
+
+    // Et surtout : rien n'a ete retire.
+    expect(await prisma.pointTransaction.count({ where: { sourceId: occurrenceId } })).toBe(0);
   });
 });
