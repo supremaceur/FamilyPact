@@ -35,6 +35,12 @@ import { applyScoreChange } from './scoring';
 /** Horizon de generation : 30 jours d'avance suffisent a une famille. */
 export const OCCURRENCE_HORIZON_DAYS = 30;
 
+/** Etats depuis lesquels un enfant peut declarer une tache terminee. */
+const CLAIMABLE_STATES: ReadonlySet<TaskOccurrenceState> = new Set([
+  TaskOccurrenceState.TODO,
+  TaskOccurrenceState.REJECTED,
+]);
+
 // ---------------------------------------------------------------------------
 // Generation
 // ---------------------------------------------------------------------------
@@ -150,8 +156,12 @@ export const claimOccurrenceDone = async (
     });
     if (occurrence === null) throw notFoundError('Cette tache est introuvable.');
 
-    // Valide la transition avant de toucher a la base : le message d'erreur
-    // vient du domaine, pas d'une contrainte SQL.
+    // Deja declaree, ou deja tranchee par un parent : on le signale sans lever
+    // d'erreur. Un double appui ne doit pas ressembler a une panne.
+    if (!CLAIMABLE_STATES.has(occurrence.state)) {
+      return { state: occurrence.state, alreadyDecided: true };
+    }
+
     const nextState = applyTransition(occurrence.state, 'CLAIM_DONE');
 
     const updated = await tx.taskOccurrence.updateMany({
@@ -251,10 +261,19 @@ const loadDecidableOccurrence = async (
 /**
  * Applique une decision parentale.
  *
- * `expectedStates` conditionne la mise a jour : si un autre parent a decide
- * entre-temps, `updateMany` ne touche aucune ligne et l'appel devient un
- * no-op signale a l'interface. Combine a l'unicite du ledger, cela garantit
- * qu'une occurrence ne peut jamais etre creditee deux fois.
+ * Deux protections distinctes, pour deux situations distinctes :
+ *
+ *   - DECISION DEJA PRISE (l'autre parent a valide il y a une minute, ou le
+ *     bouton a ete clique deux fois) : l'etat courant n'est plus attendu, et
+ *     l'appel devient un no-op signale a l'interface. Ce n'est pas une erreur —
+ *     le parent n'a rien fait de mal — et le message doit rester comprehensible,
+ *     jamais une transition technique.
+ *
+ *   - DECISION SIMULTANEE (les deux parents cliquent au meme instant) : les
+ *     deux transactions lisent l'etat attendu, mais `updateMany` est conditionne
+ *     a cet etat et prend un verrou de ligne. La seconde ne met a jour aucune
+ *     ligne. Combine a l'unicite du ledger, cela garantit qu'une occurrence ne
+ *     peut jamais etre creditee deux fois.
  */
 const decideOccurrence = async (
   actor: FamilyActor,
@@ -264,6 +283,13 @@ const decideOccurrence = async (
 
   return prisma.$transaction(async (tx) => {
     const occurrence = await loadDecidableOccurrence(tx, actor.familyId, context.occurrenceId);
+
+    // La decision a deja ete prise : on le dit, plutot que de lever une erreur
+    // de transition que l'utilisateur ne pourrait pas interpreter.
+    if (!context.expectedStates.includes(occurrence.state)) {
+      return { state: occurrence.state, alreadyDecided: true };
+    }
+
     const nextState = applyTransition(occurrence.state, context.action);
     const now = new Date();
 

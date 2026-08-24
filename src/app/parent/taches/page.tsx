@@ -26,10 +26,8 @@ const STATUS_LABEL = {
 
 const TasksPage = async () => {
   const actor = await requireParentActor();
-  const [tasks, canManage] = [
-    await listTaskDefinitions(actor),
-    hasCapability(actor, ParentPermission.TASK_MANAGE),
-  ];
+  const tasks = await listTaskDefinitions(actor);
+  const canManage = hasCapability(actor, ParentPermission.TASK_MANAGE);
 
   return (
     <div className="mx-auto max-w-3xl">
