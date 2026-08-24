@@ -95,6 +95,18 @@ Aucun défaut ouvert à ce jour.
 
 ## Points d'attention
 
+- **Deux migrations attendent d'être appliquées en production.** Le code de la
+  branche a été promu sur `family-pact-virid.vercel.app` sans que
+  `prisma migrate deploy` ait été exécuté. Tant que ce n'est pas fait,
+  `/parent/validations` et `/parent/recompenses` échoueront : le code attend des
+  colonnes et des valeurs d'énumération qui n'existent pas encore.
+
+  ```bash
+  # connexion DIRECTE, port 5432 — le pooler ne supporte pas le DDL
+  DATABASE_URL="postgresql://…@db.<ref>.supabase.co:5432/postgres" \
+    npx prisma migrate deploy
+  ```
+
 - **La clé `service_role` Supabase doit être révoquée.** Elle a été transmise en
   clair dans une conversation. Ses privilèges sur les tables sont retirés, mais
   elle reste une clé d'administration valide du projet.
