@@ -15,8 +15,13 @@ env:
   NODE_VERSION: '22'
   # Secrets FACTICES, valables uniquement pour la CI : ils ne protegent aucune
   # donnee reelle et ne doivent jamais etre reutilises ailleurs.
-  TOTP_ENCRYPTION_KEY: dGVzdC1vbmx5LXRvdHAta2V5LTMyLWJ5dGVzLXh4eHg=
-  LOG_PEPPER_KEY: dGVzdC1vbmx5LWxvZy1wZXBwZXIta2V5LTMyLWJ5dGVz
+  #
+  # Les deux cles doivent decoder sur EXACTEMENT 32 octets, sans quoi `getEnv()`
+  # refuse de demarrer et tous les jobs qui touchent au serveur echouent. Pour
+  # verifier une valeur avant de la coller ici :
+  #   node -e "console.log(Buffer.from('<valeur>','base64').length)"   # -> 32
+  TOTP_ENCRYPTION_KEY: dGVzdC1vbmx5LXRvdHAta2V5LTMyLWJ5dGVzLXh4eHg= # « test-only-totp-key-32-bytes-xxxx »
+  LOG_PEPPER_KEY: dGVzdC1vbmx5LWxvZy1wZXBwZXIta2V5LTMyLWJ5dGU= # « test-only-log-pepper-key-32-byte »
   APP_ORIGIN: http://127.0.0.1:3100
   WEBAUTHN_RP_ID: 127.0.0.1
   WEBAUTHN_RP_NAME: FamiliPact
