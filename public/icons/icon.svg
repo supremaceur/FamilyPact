@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="FamiliPact">
+  <rect width="512" height="512" rx="112" fill="#f7f5f0"/>
+  <g fill="none" stroke-linecap="round" stroke-width="46">
+    <path d="M160 352V208a96 96 0 0 1 192 0" stroke="#2a6f66"/>
+    <path d="M352 160v144a96 96 0 0 1-192 0" stroke="#2a6f66" stroke-opacity="0.42"/>
+  </g>
+</svg>
