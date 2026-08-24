@@ -285,17 +285,19 @@ const isUniqueViolation = (error: unknown): boolean =>
   error instanceof Prisma.PrismaClientKnownRequestError && error.code === UNIQUE_VIOLATION;
 
 /**
- * Etat initial d'armement d'une regle de sanction, calcule a sa creation.
+ * Une regle de sanction nait TOUJOURS armee.
  *
- * Si le score est deja sous le seuil au moment ou le parent cree la regle, la
- * regle est creee DESARMEE et une proposition immediate est produite : le
- * parent vient de decrire une situation qu'il constate, il attend une reponse,
- * pas un silence jusqu'au prochain franchissement.
+ * L'evaluation qui suit immediatement sa creation tranche :
+ *   - score au-dessus du seuil  → rien n'est propose, la regle reste armee et
+ *     attend le premier franchissement ;
+ *   - score deja sous le seuil  → une proposition est produite sur-le-champ,
+ *     puis la regle se desarme. Le parent vient de decrire une situation qu'il
+ *     constate : il attend une reponse, pas un silence jusqu'au prochain
+ *     aller-retour du score.
+ *
+ * Meme raisonnement lorsqu'un seuil est modifie : la regle est rearmee, et
+ * l'evaluation decide.
  */
-export const initialArmedState = (
-  score: number,
-  threshold: number,
-  comparator: 'LT' | 'LTE',
-): boolean => (comparator === 'LTE' ? !(score <= threshold) : !(score < threshold));
+export const INITIAL_ARMED_STATE = true;
 
 export { RewardRuleStatus, SanctionRuleStatus };

@@ -3,14 +3,24 @@ import { defineConfig } from 'vitest/config';
 
 const srcAlias = fileURLToPath(new URL('./src', import.meta.url));
 
+/**
+ * `server-only` est un marqueur destine au bundler de Next : il jette une erreur
+ * des qu'il est charge en dehors d'un composant serveur. Les tests s'executent
+ * cote Node, donc dans un contexte serveur par nature ; on le remplace par le
+ * module vide que le paquet fournit precisement pour ce cas.
+ */
+const serverOnlyStub = fileURLToPath(
+  new URL('./node_modules/server-only/empty.js', import.meta.url),
+);
+
+const aliases = { '@': srcAlias, 'server-only': serverOnlyStub };
+
 export default defineConfig({
-  resolve: {
-    alias: { '@': srcAlias },
-  },
+  resolve: { alias: aliases },
   test: {
     projects: [
       {
-        resolve: { alias: { '@': srcAlias } },
+        resolve: { alias: aliases },
         test: {
           name: 'unit',
           environment: 'node',
@@ -19,7 +29,7 @@ export default defineConfig({
         },
       },
       {
-        resolve: { alias: { '@': srcAlias } },
+        resolve: { alias: aliases },
         test: {
           name: 'integration',
           environment: 'node',
