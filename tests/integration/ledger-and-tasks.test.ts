@@ -237,6 +237,50 @@ describe("Cas D — echeance depassee puis decision d'ignorer", () => {
   });
 });
 
+describe('double appui sur une decision deja prise', () => {
+  it('signale la decision existante plutot que de lever une erreur technique', async () => {
+    await seedBalance(100);
+    const occurrenceId = await createTodayTask({ award: 20, penalty: 0 });
+    await claimOccurrenceDone(child.actor, occurrenceId);
+
+    const first = await approveOccurrence(owner, occurrenceId);
+    expect(first.alreadyDecided).toBe(false);
+
+    // Second clic, apres coup : le parent n'a rien fait de mal, il doit lire un
+    // message comprehensible et non une transition d'automate.
+    const second = await approveOccurrence(owner, occurrenceId);
+    expect(second.alreadyDecided).toBe(true);
+    expect(second.state).toBe(TaskOccurrenceState.APPROVED);
+
+    expect(await ledgerBalance(family.familyId, child.membershipId)).toBe(120);
+  });
+
+  it("signale une declaration deja transmise par l'enfant", async () => {
+    const occurrenceId = await createTodayTask({ award: 20, penalty: 0 });
+
+    const first = await claimOccurrenceDone(child.actor, occurrenceId);
+    expect(first.alreadyDecided).toBe(false);
+
+    const second = await claimOccurrenceDone(child.actor, occurrenceId);
+    expect(second.alreadyDecided).toBe(true);
+    expect(second.state).toBe(TaskOccurrenceState.CLAIMED_DONE);
+  });
+
+  it("signale une tache deja tranchee dans l'autre sens", async () => {
+    await seedBalance(100);
+    const occurrenceId = await createTodayTask({ award: 20, penalty: 0 });
+    await claimOccurrenceDone(child.actor, occurrenceId);
+    await approveOccurrence(owner, occurrenceId);
+
+    // Un parent qui arrive apres coup et clique sur « Refuser ».
+    const late = await rejectOccurrence(owner, occurrenceId);
+    expect(late.alreadyDecided).toBe(true);
+    expect(late.state).toBe(TaskOccurrenceState.APPROVED);
+    // Le score n'a pas bouge.
+    expect(await ledgerBalance(family.familyId, child.membershipId)).toBe(120);
+  });
+});
+
 describe('refus et nouvelle declaration', () => {
   it('ne credite rien au refus et laisse la tache re-declarable', async () => {
     await seedBalance(50);
