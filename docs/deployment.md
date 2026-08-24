@@ -229,6 +229,118 @@ limiting — pseudonymisée, jamais utilisée pour autoriser.
 
 ---
 
+---
+
+## Supabase comme hebergeur PostgreSQL
+
+FamiliPact utilise Supabase **uniquement comme base PostgreSQL**. Il n'utilise
+ni l'API REST (PostgREST), ni Supabase Auth, ni le client `@supabase/supabase-js`.
+
+**Pourquoi pas Supabase Auth ?** La politique d'authentification de FamiliPact
+(voir [authentication.md](authentication.md)) impose une MFA _bloquante_ modelisee
+comme un etat de session, des comptes enfants **sans adresse e-mail**, et une
+reauthentification par operation. Ce sont precisement les points qu'un service
+d'authentification generique ne modelise pas nativement — c'est le raisonnement
+de l'ADR-002 dans [architecture.md](architecture.md).
+
+### Fermeture de la surface REST — obligatoire
+
+Supabase expose par defaut toutes les tables du schema `public` via PostgREST,
+avec la cle `anon`, **publique par conception**. La cle `service_role`, elle,
+**contourne RLS**.
+
+Sans intervention, n'importe qui disposant de ces cles pourrait lire les
+empreintes de mots de passe, les secrets TOTP chiffres et les jetons de session.
+
+La migration `familipact_07_fermeture_api_rest` ferme cette surface par deux
+barrieres independantes :
+
+| Barriere                                        | Effet                                                                    |
+| ----------------------------------------------- | ------------------------------------------------------------------------ |
+| RLS active sur les 22 tables, **zero policy**   | `anon` et `authenticated` ne voient aucune ligne                         |
+| `REVOKE ALL` sur tables, sequences et fonctions | `anon`, `authenticated` **et `service_role`** n'ont plus aucun privilege |
+| `ALTER DEFAULT PRIVILEGES ... REVOKE`           | Les tables des futures migrations naissent closes                        |
+
+L'application n'est pas affectee : elle se connecte avec le role **proprietaire**
+des tables, qui contourne RLS et conserve tous ses privileges.
+
+Verification apres tout changement de schema :
+
+```sql
+-- Doit rendre 0.
+SELECT count(*) FROM information_schema.role_table_grants
+ WHERE table_schema = 'public' AND grantee IN ('anon','authenticated','service_role');
+
+-- Doit rendre autant de lignes que de tables.
+SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+ WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity;
+```
+
+### Chaines de connexion
+
+Supabase propose deux ports, et **les deux sont necessaires** :
+
+| Usage       | Port                             | Pourquoi                                                                              |
+| ----------- | -------------------------------- | ------------------------------------------------------------------------------------- |
+| Application | **6543** (pooler transactionnel) | Le serverless ouvre beaucoup de connexions courtes ; le pooler les mutualise          |
+| Migrations  | **5432** (connexion directe)     | Le pooler transactionnel ne supporte pas le DDL ni les instructions preparees longues |
+
+```bash
+DATABASE_URL="postgresql://postgres.<ref>:<MOT_DE_PASSE>@aws-0-<region>.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1"
+DIRECT_DATABASE_URL="postgresql://postgres.<ref>:<MOT_DE_PASSE>@aws-0-<region>.pooler.supabase.com:5432/postgres"
+```
+
+Le `<MOT_DE_PASSE>` est celui de la base — **ni la cle `anon`, ni la cle
+`service_role`**, qui ne servent qu'a l'API REST inutilisee ici.
+
+`connection_limit=1` avec `pgbouncer=true` est la configuration recommandee en
+serverless : chaque instance de fonction garde une seule connexion, et le pooler
+absorbe la concurrence.
+
+---
+
+## Deploiement sur Vercel
+
+```
+1. Importer le depot dans Vercel
+2. Settings > Environment Variables > Import .env
+3. Deployer
+4. Appliquer les migrations (connexion DIRECTE, port 5432) :
+      DATABASE_URL="<connexion directe>" npx prisma migrate deploy
+5. Configurer le cron des jobs
+```
+
+### Cron des jobs
+
+`vercel.json` :
+
+```json
+{ "crons": [{ "path": "/api/jobs/run", "schedule": "0 * * * *" }] }
+```
+
+Le cron Vercel n'envoie pas d'en-tete personnalise. Deux options :
+
+- exposer le declenchement via un cron externe qui, lui, envoie
+  `x-familipact-job-token` ;
+- ou faire appeler `/api/jobs/run` par une route intermediaire qui ajoute
+  l'en-tete cote serveur.
+
+La route refuse tout appel sans jeton valide : c'est volontaire, un
+ordonnanceur non authentifie ne doit pas pouvoir declencher les jobs.
+
+### Points d'attention
+
+**`APP_ORIGIN` doit correspondre au domaine reellement servi.** Sur Vercel, les
+deploiements de previsualisation ont un domaine different a chaque fois :
+WebAuthn et la verification d'origine echoueront sur ces URL. Reservez les
+cles d'acces au domaine de production, ou definissez `APP_ORIGIN` par
+environnement.
+
+**`WEBAUTHN_RP_ID` est le domaine seul**, sans `https://`, sans port, sans
+slash final. Le changer invalide toutes les cles d'acces deja enregistrees.
+
+---
+
 ## Sauvegarde et restauration
 
 Une seule base à sauvegarder, mais **deux secrets** sont indispensables à la
