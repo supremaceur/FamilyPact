@@ -27,18 +27,19 @@ comportement dégradé silencieux.
 | `LOG_PEPPER_KEY`      | 32 octets en base64             | Pseudonymise IP et agents utilisateurs                                            |
 | `APP_ORIGIN`          | URL absolue                     | Origine exacte servie. WebAuthn et la vérification CSRF refusent toute divergence |
 | `WEBAUTHN_RP_ID`      | Domaine **sans schéma ni port** | Relying Party ID                                                                  |
-| `JOB_RUNNER_TOKEN`    | ≥ 24 caractères                 | Protège `POST /api/jobs/run`                                                      |
+| `JOB_RUNNER_TOKEN`    | ≥ 24 caractères                 | Protège `/api/jobs/run`                                                           |
 
 ### Facultatives
 
-| Variable                  | Défaut         | Rôle                                            |
-| ------------------------- | -------------- | ----------------------------------------------- |
-| `SHADOW_DATABASE_URL`     | —              | Base jetable pour `prisma migrate dev`          |
-| `TEST_DATABASE_URL`       | —              | Requise pour les tests d'intégration            |
-| `WEBAUTHN_RP_NAME`        | `FamiliPact`   | Nom affiché par le navigateur                   |
-| `DEFAULT_FAMILY_TIMEZONE` | `Europe/Paris` | Fuseau proposé à la création                    |
-| `NODE_ENV`                | `development`  | `production` active HSTS et le cookie `__Host-` |
-| `ALLOW_DEV_SEED`          | —              | `1` autorise le seed. **Refusé en production**  |
+| Variable                  | Défaut         | Rôle                                                             |
+| ------------------------- | -------------- | ---------------------------------------------------------------- |
+| `SHADOW_DATABASE_URL`     | —              | Base jetable pour `prisma migrate dev`                           |
+| `TEST_DATABASE_URL`       | —              | Requise pour les tests d'intégration                             |
+| `WEBAUTHN_RP_NAME`        | `FamiliPact`   | Nom affiché par le navigateur                                    |
+| `DEFAULT_FAMILY_TIMEZONE` | `Europe/Paris` | Fuseau proposé à la création                                     |
+| `NODE_ENV`                | `development`  | `production` active HSTS et le cookie `__Host-`                  |
+| `ALLOW_DEV_SEED`          | —              | `1` autorise le seed. **Refusé en production**                   |
+| `CRON_SECRET`             | —              | **Vercel uniquement.** Doit valoir exactement `JOB_RUNNER_TOKEN` |
 
 ### Génération des secrets
 
@@ -140,13 +141,38 @@ curl -X POST https://familipact.example.com/api/jobs/run \
 
 Le jeton est comparé **à temps constant**. Sans jeton valide : `403`.
 
+La route accepte `GET` **et** `POST`, et reconnaît le jeton sous deux formes :
+`x-familipact-job-token: <jeton>` ou `Authorization: Bearer <jeton>`. Un `GET` qui
+écrit heurte les conventions HTTP ; deux propriétés le rendent sûr ici : la route est
+inaccessible sans le jeton, et l'exécution est idempotente par créneau horaire — un
+rejeu ne produit aucun effet supplémentaire.
+
+C'est aussi la seule route de mutation sans vérification d'origine, et c'est
+délibéré : un ordonnanceur n'est pas un navigateur, il n'envoie ni cookie ni en-tête
+`Origin`. Exiger l'un ou l'autre casserait la route sans rien protéger.
+
 Adapté aux plateformes serverless (Vercel Cron, Cloud Scheduler, GitHub Actions).
 
-**Exemple Vercel** — `vercel.json` :
+#### Vercel Cron
+
+`vercel.json` est déjà versionné :
 
 ```json
 { "crons": [{ "path": "/api/jobs/run", "schedule": "0 * * * *" }] }
 ```
+
+Vercel Cron n'émet que des `GET` et ne sait pas ajouter d'en-tête personnalisé : il
+joint `Authorization: Bearer $CRON_SECRET`. Il faut donc définir **deux** variables
+d'environnement portant la **même valeur** :
+
+| Variable           | Lue par                                  |
+| ------------------ | ---------------------------------------- |
+| `JOB_RUNNER_TOKEN` | L'application, pour valider l'appel      |
+| `CRON_SECRET`      | Vercel, pour construire l'en-tête envoyé |
+
+Si elles divergent, le cron s'exécute mais reçoit `403` : les échéances dépassées ne
+sont plus détectées, et **rien ne le signale dans l'interface**. Après le premier
+déploiement, vérifier une exécution dans l'onglet _Cron Jobs_ du projet.
 
 ### Déclenchement par processus
 
@@ -413,6 +439,7 @@ Double garde-fou : il crée des comptes aux mots de passe connus.
 
 - [ ] `TOTP_ENCRYPTION_KEY` et `LOG_PEPPER_KEY` générées aléatoirement, jamais réutilisées
 - [ ] `JOB_RUNNER_TOKEN` généré aléatoirement
+- [ ] Sur Vercel : `CRON_SECRET` défini avec la même valeur que `JOB_RUNNER_TOKEN`
 - [ ] `APP_ORIGIN` correspond exactement à l'URL servie, en HTTPS
 - [ ] `WEBAUTHN_RP_ID` est le domaine seul, sans schéma ni port
 - [ ] `NODE_ENV=production`

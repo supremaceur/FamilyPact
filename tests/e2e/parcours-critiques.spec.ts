@@ -143,6 +143,30 @@ test.describe('accueil public', () => {
     await expect(page.getByText(/n'applique jamais une sanction toute seule/i)).toBeVisible();
   });
 
+  test("presente de vraies captures de l'application", async ({ page, request }) => {
+    await page.goto('/');
+
+    // Les captures sont des fichiers statiques : un renommage casserait la page
+    // sans qu'aucun test unitaire ne s'en apercoive. On verifie donc a la fois
+    // leur presence dans le DOM et le fait que le serveur les serve vraiment.
+    const previews = page.locator('main img[src^="/captures/"]');
+    await expect(previews).toHaveCount(4);
+
+    const sources = await previews.evaluateAll((images) =>
+      images.map((image) => (image as HTMLImageElement).getAttribute('src') ?? ''),
+    );
+    for (const source of sources) {
+      const response = await request.get(source);
+      expect(response.ok(), `${source} doit etre servie`).toBe(true);
+      expect(response.headers()['content-type']).toContain('image/webp');
+    }
+
+    // Une capture sans description alternative n'apprend rien a qui ne la voit pas.
+    for (let index = 0; index < 4; index += 1) {
+      await expect(previews.nth(index)).toHaveAttribute('alt', /.{40,}/);
+    }
+  });
+
   test("propose un lien d'evitement vers le contenu", async ({ page }) => {
     await page.goto('/');
     await page.keyboard.press('Tab');
