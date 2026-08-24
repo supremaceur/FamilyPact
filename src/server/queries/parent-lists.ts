@@ -1,7 +1,13 @@
 import 'server-only';
 
-import { FamilyRole, RewardRuleStatus, SanctionRuleStatus } from '@/generated/prisma/enums';
+import {
+  FamilyRole,
+  RewardEventStatus,
+  RewardRuleStatus,
+  SanctionRuleStatus,
+} from '@/generated/prisma/enums';
 import { notFoundError } from '@/domain/errors';
+import { rewardBelowThreshold } from '@/domain/rules-engine';
 import type { FamilyActor } from '@/server/auth/context';
 import { prisma } from '@/server/db/prisma';
 
@@ -184,7 +190,13 @@ export const listRewardEvents = async (actor: FamilyActor) =>
       scoreAtProposal: true,
       proposedAt: true,
       decidedAt: true,
+      keptAt: true,
+      revokedAt: true,
+      revocationReason: true,
       childMembershipId: true,
+      // `revocable` est porte par la REGLE, pas par l'evenement : la famille
+      // declare une bonne fois que ce palier donne une recompense qui dure.
+      rewardRule: { select: { revocable: true } },
       child: {
         select: {
           user: { select: { displayName: true } },
@@ -192,8 +204,59 @@ export const listRewardEvents = async (actor: FamilyActor) =>
         },
       },
       decidedBy: { select: { user: { select: { displayName: true } } } },
+      revokedBy: { select: { user: { select: { displayName: true } } } },
     },
   });
+
+/**
+ * Recompenses qui durent, encore detenues, dont le score est repasse sous le
+ * palier — donc a SIGNALER au parent.
+ *
+ * Rien n'est persiste : la liste est recalculee a chaque affichage a partir du
+ * score courant. Elle disparait donc d'elle-meme si le score remonte, sans
+ * traitement de rattrapage ni risque de derive entre une proposition figee et
+ * la realite.
+ */
+export const listRewardRevocationSuggestions = async (actor: FamilyActor) => {
+  const events = await prisma.rewardEvent.findMany({
+    where: {
+      familyId: actor.familyId,
+      status: RewardEventStatus.GRANTED,
+      keptAt: null,
+      rewardRule: { revocable: true },
+    },
+    orderBy: { decidedAt: 'desc' },
+    take: 100,
+    select: {
+      id: true,
+      titleSnapshot: true,
+      thresholdSnapshot: true,
+      decidedAt: true,
+      childMembershipId: true,
+      child: {
+        select: {
+          user: { select: { displayName: true } },
+          childProfile: { select: { cachedBalance: true, avatarKey: true, colorKey: true } },
+        },
+      },
+    },
+  });
+
+  return events
+    .map((event) => ({ event, score: event.child.childProfile?.cachedBalance ?? 0 }))
+    .filter(({ event, score }) => rewardBelowThreshold(score, event.thresholdSnapshot))
+    .map(({ event, score }) => ({
+      id: event.id,
+      title: event.titleSnapshot,
+      threshold: event.thresholdSnapshot,
+      grantedAt: event.decidedAt,
+      score,
+      childMembershipId: event.childMembershipId,
+      childName: event.child.user.displayName,
+      avatarKey: event.child.childProfile?.avatarKey ?? 'fox',
+      colorKey: event.child.childProfile?.colorKey ?? 'sage',
+    }));
+};
 
 /** Detail complet d'un enfant, pour la fiche de l'espace parent. */
 export const getChildDetail = async (actor: FamilyActor, childMembershipId: string) => {

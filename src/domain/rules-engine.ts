@@ -281,6 +281,51 @@ export const nextRewardProgress = (
   };
 };
 
+// ---------------------------------------------------------------------------
+// Retrait d'une recompense qui durait
+// ---------------------------------------------------------------------------
+
+export interface GrantedRewardView {
+  readonly rewardEventId: string;
+  readonly title: string;
+  readonly threshold: number;
+  /** La regle declare-t-elle une recompense qui dure ? */
+  readonly revocable: boolean;
+  /** Un parent a deja choisi de la laisser malgre un score redescendu. */
+  readonly kept: boolean;
+}
+
+/**
+ * Le score est-il redescendu sous le palier qui avait donne la recompense ?
+ *
+ * Strictement inferieur, par symetrie exacte avec `rewardThresholdReached`
+ * (`score >= threshold`) : au score du palier pile, la recompense reste due.
+ */
+export const rewardBelowThreshold = (score: number, threshold: number): boolean =>
+  score < threshold;
+
+/**
+ * Recompenses dont le retrait merite d'etre SIGNALE au parent.
+ *
+ * Ne decide rien, et ne cree aucune ligne : la suggestion est recalculee a
+ * chaque affichage a partir du score courant. Elle disparait donc d'elle-meme
+ * si le score remonte, sans traitement de rattrapage ni risque de derive entre
+ * une proposition figee et la realite.
+ *
+ * Trois conditions cumulatives :
+ *   - la famille a declare la recompense comme durable (`revocable`) — un
+ *     restaurant deja vecu ne se reprend pas ;
+ *   - aucun parent n'a deja repondu « laisser » ;
+ *   - le score est repasse sous le palier.
+ */
+export const suggestRewardRevocations = (
+  score: number,
+  granted: readonly GrantedRewardView[],
+): readonly GrantedRewardView[] =>
+  granted.filter(
+    (reward) => reward.revocable && !reward.kept && rewardBelowThreshold(score, reward.threshold),
+  );
+
 /**
  * Ratio de progression, borne a [0, 1].
  *

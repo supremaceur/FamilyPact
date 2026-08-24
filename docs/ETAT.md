@@ -4,7 +4,7 @@
 > Il existe pour éviter de reparcourir le code afin de reconstruire un contexte
 > déjà écrit.
 
-**Dernière mise à jour** : 24 août 2026, 22 h
+**Dernière mise à jour** : 24 août 2026, 23 h
 
 ## En production
 
@@ -56,6 +56,22 @@ Puis l'habillage demandé, direction « Ardoise » :
    décision. Relief porté par des jetons (`--card-ring`, `--card-surface`,
    `--card-inset`, `--app-backdrop`), donc modifiable en un point.
 
+Puis le retrait d'une récompense :
+
+7. **Deux natures de récompense**, déclarées à la création du palier
+   (`RewardRule.revocable`) : ponctuelle — acquise pour de bon — ou qui dure,
+   donc reprenable. Voir `DECISIONS.md` D-010.
+8. **Le retrait est signalé, jamais appliqué** : la suggestion est recalculée à
+   chaque affichage à partir du score, donc jamais figée. Motif obligatoire,
+   aucun point rendu ni retiré, visible dans les deux historiques.
+
+Et une correction sans rapport, trouvée en route :
+
+9. **Les tests d'intégration construisaient « aujourd'hui » en UTC** alors que la
+   famille de test est à Paris. Entre 22 h UTC et minuit ils fabriquaient donc la
+   veille : dix-neuf tests tombaient, uniquement le soir. Ils passent désormais
+   par `toLocalDate(new Date(), family.timeZone)`.
+
 ## Défauts connus
 
 Aucun défaut ouvert à ce jour.
@@ -65,7 +81,7 @@ Aucun défaut ouvert à ce jour.
 | Demande                                    | Note                                                                                                                                                   |
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Rafraîchissement périodique de l'interface | Choix retenu : interrogation périodique (`router.refresh()` toutes les 15–20 s + au retour de focus). **Pas** Supabase Realtime — voir `DECISIONS.md`. |
-| Révocation d'une récompense accordée       | Quand le score repasse sous le seuil qui l'avait déclenchée. Proposition, jamais automatique.                                                          |
+| Révocation d'une récompense accordée       | ✅ Fait — seulement pour les récompenses déclarées « qui durent ». Signalée quand le score repasse sous le palier, jamais appliquée seule.             |
 | Habillage visuel des écrans                | ✅ Fait — direction « Ardoise » retenue, appliquée aux 22 pages. Vérifié en clair et en sombre, à 1440 px et à 412 px.                                 |
 
 ## Points d'attention
@@ -86,5 +102,5 @@ npm run format:check && npm run lint && npm run typecheck && npm run test:all
 npm run build
 ```
 
-Compte de référence au 24 août 2026 : **171 tests** (87 unitaires, 84
+Compte de référence au 24 août 2026 : **176 tests** (87 unitaires, 89
 d'intégration) et **28 tests de bout en bout**.

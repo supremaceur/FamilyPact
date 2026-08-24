@@ -1,3 +1,4 @@
+import { toLocalDate } from '@/domain/time';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   FamilyRole,
@@ -29,7 +30,15 @@ import type { FamilyActor } from '@/server/auth/context';
  * automatique, et decision d'ignorer.
  */
 
-const toIsoDate = (date: Date): string => date.toISOString().slice(0, 10);
+/**
+ * « Aujourd'hui » DANS LE FUSEAU DE LA FAMILLE, pas en UTC.
+ *
+ * La generation d'occurrences raisonne en date locale : entre 22 h UTC et
+ * minuit, `toISOString()` rend la veille pour une famille a Paris, et la tache
+ * creee n'a alors aucune occurrence. Le test passait donc la journee et
+ * echouait le soir — une fausse alerte a chaque fois.
+ */
+const aujourdHui = (): string => toLocalDate(new Date(), family.timeZone);
 
 let family: Awaited<ReturnType<typeof createFamily>>;
 let child: Awaited<ReturnType<typeof addChild>>;
@@ -61,7 +70,7 @@ const createTaskWithPastDeadline = async (points: { award: number; penalty: numb
     pointsAward: points.award,
     pointsPenalty: points.penalty,
     recurrence: TaskRecurrence.ONE_OFF,
-    startDate: toIsoDate(new Date()),
+    startDate: aujourdHui(),
     endDate: null,
     dueTime: '08:00',
     weekdays: [],
@@ -73,7 +82,6 @@ const createTaskWithPastDeadline = async (points: { award: number; penalty: numb
 const AFTER_TODAY = new Date(Date.now() + 2 * 86_400_000);
 
 const createTodayTask = async (points: { award: number; penalty: number }, title = 'Devoirs') => {
-  const today = new Date();
   const { id } = await createTaskDefinition(owner, {
     childMembershipId: child.membershipId,
     title,
@@ -81,7 +89,7 @@ const createTodayTask = async (points: { award: number; penalty: number }, title
     pointsAward: points.award,
     pointsPenalty: points.penalty,
     recurrence: TaskRecurrence.ONE_OFF,
-    startDate: toIsoDate(today),
+    startDate: aujourdHui(),
     endDate: null,
     dueTime: '23:59',
     weekdays: [],

@@ -7,7 +7,7 @@ import {
   SanctionInstanceStatus,
   TaskOccurrenceState,
 } from '@/generated/prisma/enums';
-import { nextRewardProgress } from '@/domain/rules-engine';
+import { nextRewardProgress, rewardBelowThreshold } from '@/domain/rules-engine';
 import type { ActionRequiredCountsView, ChildSummaryView } from '@/lib/read-models';
 import type { FamilyActor } from '@/server/auth/context';
 import { prisma } from '@/server/db/prisma';
@@ -34,53 +34,74 @@ export interface ParentDashboardData {
 export const getParentDashboard = async (actor: FamilyActor): Promise<ParentDashboardData> => {
   const familyId = actor.familyId;
 
-  const [children, occurrenceCounts, sanctionCounts, rewardRules, rewardEvents, pendingRewards] =
-    await Promise.all([
-      prisma.familyMembership.findMany({
-        where: { familyId, role: FamilyRole.CHILD, status: 'ACTIVE' },
-        orderBy: { joinedAt: 'asc' },
-        select: {
-          id: true,
-          user: { select: { displayName: true } },
-          childProfile: { select: { avatarKey: true, colorKey: true, cachedBalance: true } },
+  const [
+    children,
+    occurrenceCounts,
+    sanctionCounts,
+    rewardRules,
+    rewardEvents,
+    pendingRewards,
+    revocableRewards,
+  ] = await Promise.all([
+    prisma.familyMembership.findMany({
+      where: { familyId, role: FamilyRole.CHILD, status: 'ACTIVE' },
+      orderBy: { joinedAt: 'asc' },
+      select: {
+        id: true,
+        user: { select: { displayName: true } },
+        childProfile: { select: { avatarKey: true, colorKey: true, cachedBalance: true } },
+      },
+    }),
+    prisma.taskOccurrence.groupBy({
+      by: ['childMembershipId', 'state'],
+      where: {
+        familyId,
+        state: {
+          in: [TaskOccurrenceState.CLAIMED_DONE, TaskOccurrenceState.MISSED_PENDING_REVIEW],
         },
-      }),
-      prisma.taskOccurrence.groupBy({
-        by: ['childMembershipId', 'state'],
-        where: {
-          familyId,
-          state: {
-            in: [TaskOccurrenceState.CLAIMED_DONE, TaskOccurrenceState.MISSED_PENDING_REVIEW],
-          },
+      },
+      _count: { _all: true },
+    }),
+    prisma.sanctionInstance.groupBy({
+      by: ['childMembershipId', 'status'],
+      where: {
+        familyId,
+        status: {
+          in: [
+            SanctionInstanceStatus.PROPOSED,
+            SanctionInstanceStatus.ACTIVE,
+            SanctionInstanceStatus.LIFT_ELIGIBLE,
+          ],
         },
-        _count: { _all: true },
-      }),
-      prisma.sanctionInstance.groupBy({
-        by: ['childMembershipId', 'status'],
-        where: {
-          familyId,
-          status: {
-            in: [
-              SanctionInstanceStatus.PROPOSED,
-              SanctionInstanceStatus.ACTIVE,
-              SanctionInstanceStatus.LIFT_ELIGIBLE,
-            ],
-          },
-        },
-        _count: { _all: true },
-      }),
-      prisma.rewardRule.findMany({
-        where: { familyId, status: RewardRuleStatus.ACTIVE },
-        select: { id: true, title: true, threshold: true, status: true, childMembershipId: true },
-      }),
-      prisma.rewardEvent.findMany({
-        where: { familyId },
-        select: { rewardRuleId: true, status: true },
-      }),
-      prisma.rewardEvent.count({
-        where: { familyId, status: RewardEventStatus.PENDING_PARENT_APPROVAL },
-      }),
-    ]);
+      },
+      _count: { _all: true },
+    }),
+    prisma.rewardRule.findMany({
+      where: { familyId, status: RewardRuleStatus.ACTIVE },
+      select: { id: true, title: true, threshold: true, status: true, childMembershipId: true },
+    }),
+    prisma.rewardEvent.findMany({
+      where: { familyId },
+      select: { rewardRuleId: true, status: true },
+    }),
+    prisma.rewardEvent.count({
+      where: { familyId, status: RewardEventStatus.PENDING_PARENT_APPROVAL },
+    }),
+    // Recompenses qui durent, encore detenues, non arbitrees. Le seuil est
+    // compare au score en memoire : la suggestion n'est jamais persistee.
+    prisma.rewardEvent.findMany({
+      where: {
+        familyId,
+        status: RewardEventStatus.GRANTED,
+        keptAt: null,
+        rewardRule: { revocable: true },
+      },
+      select: {
+        thresholdSnapshot: true,
+        child: { select: { childProfile: { select: { cachedBalance: true } } } },
+      },
+    }),
+  ]);
 
   const eventByRule = new Map(rewardEvents.map((event) => [event.rewardRuleId, event.status]));
 
@@ -144,6 +165,9 @@ export const getParentDashboard = async (actor: FamilyActor): Promise<ParentDash
   const sanctionLifts = sanctionCounts
     .filter((row) => row.status === SanctionInstanceStatus.LIFT_ELIGIBLE)
     .reduce((total, row) => total + row._count._all, 0);
+  const rewardRevocations = revocableRewards.filter((reward) =>
+    rewardBelowThreshold(reward.child.childProfile?.cachedBalance ?? 0, reward.thresholdSnapshot),
+  ).length;
 
   return {
     children: summaries,
@@ -151,9 +175,16 @@ export const getParentDashboard = async (actor: FamilyActor): Promise<ParentDash
       taskApprovals,
       missedReviews,
       rewardApprovals: pendingRewards,
+      rewardRevocations,
       sanctionActivations,
       sanctionLifts,
-      total: taskApprovals + missedReviews + pendingRewards + sanctionActivations + sanctionLifts,
+      total:
+        taskApprovals +
+        missedReviews +
+        pendingRewards +
+        rewardRevocations +
+        sanctionActivations +
+        sanctionLifts,
     },
   };
 };

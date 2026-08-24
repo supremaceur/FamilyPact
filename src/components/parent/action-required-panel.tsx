@@ -38,6 +38,14 @@ const ROWS: readonly {
       count === 1 ? '1 recompense proposee a valider' : `${count} recompenses proposees a valider`,
   },
   {
+    key: 'rewardRevocations',
+    href: '/parent/recompenses',
+    label: (count) =>
+      count === 1
+        ? '1 recompense a revoir : le score est repasse sous le palier'
+        : `${count} recompenses a revoir : le score est repasse sous le palier`,
+  },
+  {
     key: 'sanctionActivations',
     href: '/parent/sanctions',
     label: (count) =>

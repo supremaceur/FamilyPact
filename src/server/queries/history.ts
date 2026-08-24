@@ -143,6 +143,9 @@ export const getLedgerHistory = async (
 const DECISIONS_SANS_MOUVEMENT: readonly AuditAction[] = [
   AuditAction.TASK_REJECTED,
   AuditAction.TASK_MISSED_IGNORED,
+  // Retirer une recompense ne touche a aucun point : sans cette ligne, la
+  // decision n'apparaitrait nulle part dans l'historique de l'enfant.
+  AuditAction.REWARD_REVOKED,
 ];
 
 export type TimelineEntry =

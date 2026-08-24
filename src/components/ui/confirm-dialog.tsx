@@ -24,6 +24,7 @@ export const ConfirmDialog = ({
   confirmVariant = 'primary',
   cancelLabel = 'Annuler',
   pending = false,
+  confirmDisabled = false,
   onConfirm,
   onCancel,
 }: {
@@ -34,6 +35,11 @@ export const ConfirmDialog = ({
   readonly confirmVariant?: ButtonVariant;
   readonly cancelLabel?: string;
   readonly pending?: boolean;
+  /**
+   * Confirmation bloquee tant qu'une saisie obligatoire manque. Distinct de
+   * `pending` : le bouton est inerte, mais il n'annonce pas un envoi en cours.
+   */
+  readonly confirmDisabled?: boolean;
   readonly onConfirm: () => void;
   readonly onCancel: () => void;
 }) => {
@@ -66,7 +72,12 @@ export const ConfirmDialog = ({
           <Button variant="secondary" onClick={onCancel} disabled={pending}>
             {cancelLabel}
           </Button>
-          <Button variant={confirmVariant} onClick={onConfirm} pending={pending}>
+          <Button
+            variant={confirmVariant}
+            onClick={onConfirm}
+            pending={pending}
+            disabled={confirmDisabled}
+          >
             {confirmLabel}
           </Button>
         </div>

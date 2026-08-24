@@ -21,6 +21,7 @@ const TYPE_LABELS: Record<string, string> = {
 const DECISION_LABELS: Record<string, string> = {
   TASK_REJECTED: 'Tache refusee — aucun point retire',
   TASK_MISSED_IGNORED: 'Echeance depassee — ignoree',
+  REWARD_REVOKED: 'Recompense retiree — aucun point retire',
 };
 
 /**
@@ -117,11 +118,11 @@ const HistoryPage = async ({
                       <p className="text-sm">{row.summary}</p>
                     )}
                     <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-                      {formatDateTime(row.at, actor.timeZone)} \u00b7{' '}
+                      {formatDateTime(row.at, actor.timeZone)} ·{' '}
                       {row.kind === 'POINTS'
                         ? (TYPE_LABELS[row.type] ?? row.type)
                         : (DECISION_LABELS[row.action] ?? row.action)}
-                      {row.actorName !== null && <> \u00b7 par {row.actorName}</>}
+                      {row.actorName !== null && <> · par {row.actorName}</>}
                     </p>
                     {row.reason !== null && (
                       <p className="mt-1 text-xs text-[var(--text-secondary)]">

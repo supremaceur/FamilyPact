@@ -8,6 +8,40 @@
 
 ---
 
+## D-010 — Le retrait d'une récompense se déclare à la création du palier
+
+**Décision.** `RewardRule.revocable`, un booléen posé par la famille en créant le
+palier, décide si la récompense peut être reprise. Une récompense ponctuelle
+(`false`, le défaut) ne se retire jamais, et l'application ne propose même pas de
+le faire. Une récompense qui dure (`true`) est signalée quand le score repasse
+sous le palier ; un parent retire, ou laisse.
+
+La suggestion n'est **pas persistée** : elle est recalculée à chaque affichage à
+partir du score courant.
+
+**Pourquoi.** Deux options ont été écartées.
+
+_Tout rendre retirable_ et laisser le parent trancher au cas par cas : simple à
+écrire, mais l'application aurait proposé de reprendre un restaurant déjà vécu.
+Une suggestion absurde une fois sur deux n'est plus lue, et celles qui comptent
+disparaissent avec.
+
+_Persister une proposition de retrait_, comme pour les récompenses et les
+sanctions : c'était le réflexe, par symétrie. Mais une proposition figée dérive
+dès que le score remonte — il aurait fallu un traitement de rattrapage pour la
+retirer, donc un job de plus, donc un état de plus à réconcilier. Le calcul à la
+volée n'a aucun de ces problèmes et disparaît tout seul.
+
+`keptAt` existe pour la seule chose que le calcul ne peut pas déduire : qu'un
+parent a déjà tranché. Sans lui, l'application redemanderait tous les jours et
+finirait par obtenir un oui de lassitude, qui ne serait pas une décision.
+
+**Ce que ça coûte.** Une case à cocher de plus dans le formulaire de palier, et
+une notion que la famille doit comprendre. Les paliers existants restent
+ponctuels : aucune récompense déjà accordée ne devient reprenable sans qu'un
+parent l'ait voulu. Et le score n'est jamais touché — retirer une récompense ne
+rend aucun point, sans quoi les points deviendraient une monnaie.
+
 ## D-009 — Interrogation périodique plutôt que Supabase Realtime
 
 **Décision.** Le rafraîchissement en direct passera par une interrogation

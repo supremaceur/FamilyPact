@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { DashboardColumn, DashboardGrid, PageBody } from '@/components/layout/page-body';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ProgressBar } from '@/components/ui/progress';
@@ -69,16 +70,45 @@ const ChildRewardsPage = async () => {
                           )}
                         </p>
                       </div>
+                      {reward.revocable && <Badge tone="info">Dure dans le temps</Badge>}
                     </li>
                   ))}
                 </ul>
               )}
               <p className="mt-4 text-xs text-[var(--text-muted)]">
-                Une recompense obtenue reste acquise, meme si ton score redescend ensuite. Elle ne
-                te coute aucun point.
+                Une recompense ne te coute aucun point. Celles qui sont ponctuelles restent
+                acquises. Celles qui durent — du temps d&apos;ecran, une permission — peuvent etre
+                retirees par un parent si ton score repasse sous le palier.
               </p>
             </CardBody>
           </Card>
+
+          {data.revokedRewards.length > 0 && (
+            <Card>
+              <CardHeader
+                title="Recompenses retirees"
+                description="Un parent a repris ces recompenses. Le motif est indique."
+              />
+              <CardBody className="pt-0">
+                <ul className="divide-y divide-[var(--border-subtle)]">
+                  {data.revokedRewards.map((reward) => (
+                    <li key={reward.id} className="py-3">
+                      <p className="text-sm font-medium">{reward.title}</p>
+                      <p className="text-xs text-[var(--text-muted)]">
+                        Palier {reward.threshold} points
+                        {reward.revokedAt !== null && (
+                          <> · retiree le {formatDate(reward.revokedAt, actor.timeZone)}</>
+                        )}
+                      </p>
+                      {reward.reason !== null && (
+                        <p className="mt-1 text-xs text-[var(--text-secondary)]">{reward.reason}</p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </CardBody>
+            </Card>
+          )}
         </DashboardColumn>
       </DashboardGrid>
     </PageBody>

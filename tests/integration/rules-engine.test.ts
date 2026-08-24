@@ -7,7 +7,13 @@ import {
 } from '@/generated/prisma/enums';
 import { prisma } from '@/server/db/prisma';
 import { adjustPoints } from '@/server/services/point-adjustments';
-import { createRewardRule, grantReward, ignoreReward } from '@/server/services/rewards';
+import {
+  createRewardRule,
+  grantReward,
+  ignoreReward,
+  keepReward,
+  revokeReward,
+} from '@/server/services/rewards';
 import {
   activateSanction,
   createSanctionRule,
@@ -15,6 +21,8 @@ import {
   liftSanction,
 } from '@/server/services/sanctions';
 import { runEvaluateRules } from '@/server/jobs/runner';
+import { listRewardRevocationSuggestions } from '@/server/queries/parent-lists';
+import { getFamilyTimeline } from '@/server/queries/history';
 import { addChild, createFamily } from './helpers';
 import type { FamilyActor } from '@/server/auth/context';
 
@@ -490,5 +498,176 @@ describe('creation de regle sur une situation deja constatee', () => {
     });
     expect(events).toHaveLength(1);
     expect(events[0]!.status).toBe(RewardEventStatus.PENDING_PARENT_APPROVAL);
+  });
+});
+
+/**
+ * Cas L — retrait d'une recompense qui durait.
+ *
+ * Le scenario de l'utilisateur, mot pour mot : l'enfant obtient « 30 min
+ * d'ecran » a 80 points, redescend a 70, et le parent peut reprendre. Le
+ * restaurant deja vecu, lui, ne se reprend pas.
+ */
+describe("Cas L — retrait d'une recompense", () => {
+  const creerEtAccorder = async (options: {
+    readonly threshold: number;
+    readonly title: string;
+    readonly revocable: boolean;
+  }): Promise<string> => {
+    await createRewardRule(owner, {
+      childMembershipId: child.membershipId,
+      threshold: options.threshold,
+      title: options.title,
+      description: null,
+      revocable: options.revocable,
+    });
+    const event = await prisma.rewardEvent.findFirstOrThrow({
+      where: { childMembershipId: child.membershipId, titleSnapshot: options.title },
+      select: { id: true },
+    });
+    await grantReward(owner, event.id);
+    return event.id;
+  };
+
+  it('signale le retrait quand le score repasse sous le palier, sans rien decider', async () => {
+    await setScore(80);
+    const eventId = await creerEtAccorder({
+      threshold: 80,
+      title: "30 min d'ecran",
+      revocable: true,
+    });
+
+    // A 80 points, rien a revoir : le palier est encore tenu.
+    expect(await listRewardRevocationSuggestions(owner)).toHaveLength(0);
+
+    await setScore(70);
+
+    const suggestions = await listRewardRevocationSuggestions(owner);
+    expect(suggestions).toHaveLength(1);
+    expect(suggestions[0]!.id).toBe(eventId);
+    expect(suggestions[0]!.score).toBe(70);
+
+    // SIGNALER n'est pas DECIDER : la recompense est toujours detenue.
+    const encoreDetenue = await prisma.rewardEvent.findUniqueOrThrow({
+      where: { id: eventId },
+      select: { status: true, revokedAt: true },
+    });
+    expect(encoreDetenue.status).toBe(RewardEventStatus.GRANTED);
+    expect(encoreDetenue.revokedAt).toBeNull();
+  });
+
+  it('retire la recompense sans toucher au score, et garde le motif', async () => {
+    await setScore(80);
+    const eventId = await creerEtAccorder({
+      threshold: 80,
+      title: "30 min d'ecran",
+      revocable: true,
+    });
+    await setScore(70);
+
+    const result = await revokeReward(owner, eventId, 'Chambre pas rangee de la semaine');
+    expect(result.status).toBe(RewardEventStatus.REVOKED);
+    expect(result.alreadyDecided).toBe(false);
+
+    const retiree = await prisma.rewardEvent.findUniqueOrThrow({
+      where: { id: eventId },
+      select: { status: true, revokedById: true, revocationReason: true },
+    });
+    expect(retiree.status).toBe(RewardEventStatus.REVOKED);
+    expect(retiree.revokedById).toBe(owner.membershipId);
+    expect(retiree.revocationReason).toBe('Chambre pas rangee de la semaine');
+
+    // AUCUN point rendu ni retire : la recompense n'avait rien coute.
+    const profile = await prisma.childProfile.findUniqueOrThrow({
+      where: { membershipId: child.membershipId },
+      select: { cachedBalance: true },
+    });
+    expect(profile.cachedBalance).toBe(70);
+
+    // Et le retrait est lisible dans la chronologie, avec son motif.
+    const timeline = await getFamilyTimeline(owner, { childMembershipId: null, cursor: null });
+    const ligne = timeline.items.find(
+      (item) => item.kind === 'DECISION' && item.action === 'REWARD_REVOKED',
+    );
+    expect(ligne).toBeDefined();
+    expect(ligne!.reason).toBe('Chambre pas rangee de la semaine');
+  });
+
+  it("refuse de retirer une recompense ponctuelle : c'est fait, c'est fait", async () => {
+    await setScore(200);
+    const eventId = await creerEtAccorder({
+      threshold: 200,
+      title: 'Restaurant',
+      revocable: false,
+    });
+    await setScore(100);
+
+    // Elle n'est meme pas signalee.
+    expect(await listRewardRevocationSuggestions(owner)).toHaveLength(0);
+
+    await expect(revokeReward(owner, eventId, 'Betise')).rejects.toMatchObject({
+      code: 'CONFLICT',
+    });
+
+    const intacte = await prisma.rewardEvent.findUniqueOrThrow({
+      where: { id: eventId },
+      select: { status: true },
+    });
+    expect(intacte.status).toBe(RewardEventStatus.GRANTED);
+  });
+
+  it('cesse de proposer le retrait une fois que le parent a choisi de laisser', async () => {
+    await setScore(80);
+    const eventId = await creerEtAccorder({
+      threshold: 80,
+      title: "30 min d'ecran",
+      revocable: true,
+    });
+    await setScore(70);
+    expect(await listRewardRevocationSuggestions(owner)).toHaveLength(1);
+
+    await keepReward(owner, eventId, null);
+
+    expect(await listRewardRevocationSuggestions(owner)).toHaveLength(0);
+
+    // « Laisser » ne change rien a la recompense elle-meme.
+    const laissee = await prisma.rewardEvent.findUniqueOrThrow({
+      where: { id: eventId },
+      select: { status: true, keptAt: true },
+    });
+    expect(laissee.status).toBe(RewardEventStatus.GRANTED);
+    expect(laissee.keptAt).not.toBeNull();
+
+    // Le retrait manuel reste possible ensuite.
+    await revokeReward(owner, eventId, 'Finalement non');
+    const retiree = await prisma.rewardEvent.findUniqueOrThrow({
+      where: { id: eventId },
+      select: { status: true },
+    });
+    expect(retiree.status).toBe(RewardEventStatus.REVOKED);
+  });
+
+  it("exige un motif, et ne retire qu'une fois", async () => {
+    await setScore(80);
+    const eventId = await creerEtAccorder({
+      threshold: 80,
+      title: "30 min d'ecran",
+      revocable: true,
+    });
+
+    await expect(revokeReward(owner, eventId, '   ')).rejects.toMatchObject({
+      code: 'VALIDATION',
+    });
+
+    await revokeReward(owner, eventId, 'Premiere fois');
+    // Deuxieme appel : la recompense n'est plus GRANTED, donc rien ne bouge.
+    const second = await revokeReward(owner, eventId, 'Deuxieme fois');
+    expect(second.alreadyDecided).toBe(true);
+
+    const retiree = await prisma.rewardEvent.findUniqueOrThrow({
+      where: { id: eventId },
+      select: { revocationReason: true },
+    });
+    expect(retiree.revocationReason).toBe('Premiere fois');
   });
 });

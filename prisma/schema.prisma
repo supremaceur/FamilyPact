@@ -120,7 +120,7 @@ model RecoveryCode {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  codeHash String
+  codeHash  String
   /// Prefixe non secret, uniquement pour afficher "XXXX-…" dans la liste.
   label     String
   usedAt    DateTime?
@@ -139,14 +139,14 @@ model WebAuthnCredential {
   publicKey    String
   counter      BigInt @default(0)
 
-  transports     String[] @default([])
-  deviceType     String?
-  backedUp       Boolean  @default(false)
+  transports    String[] @default([])
+  deviceType    String?
+  backedUp      Boolean  @default(false)
   /// Nom lisible choisi par l'utilisateur ("iPhone de Marie").
-  nickname       String
-  aaguid         String?
+  nickname      String
+  aaguid        String?
   /// True pour un authentificateur de plateforme (Face ID / Touch ID / Windows Hello).
-  platformBound  Boolean  @default(false)
+  platformBound Boolean  @default(false)
 
   createdAt  DateTime  @default(now())
   lastUsedAt DateTime?
@@ -166,9 +166,9 @@ model WebAuthnChallenge {
   userId String?
   user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  type      WebAuthnChallengeType
-  challenge String                @unique
-  expiresAt DateTime
+  type       WebAuthnChallengeType
+  challenge  String                @unique
+  expiresAt  DateTime
   /// Un challenge consomme ne peut plus servir.
   consumedAt DateTime?
   createdAt  DateTime              @default(now())
@@ -278,34 +278,35 @@ model FamilyMembership {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  permissions ParentPermissionGrant[]
+  permissions  ParentPermissionGrant[]
   childProfile ChildProfile?
 
   createdInvitations Invitation[] @relation("InvitationCreator")
   revokedInvitations Invitation[] @relation("InvitationRevoker")
 
   /// Taches dont cette adhesion est l'ENFANT concerne.
-  childTaskDefinitions TaskDefinition[] @relation("TaskChild")
-  childTaskOccurrences TaskOccurrence[] @relation("OccurrenceChild")
+  childTaskDefinitions TaskDefinition[]   @relation("TaskChild")
+  childTaskOccurrences TaskOccurrence[]   @relation("OccurrenceChild")
   childTransactions    PointTransaction[] @relation("TransactionChild")
-  childRewardRules     RewardRule[]     @relation("RewardRuleChild")
-  childRewardEvents    RewardEvent[]    @relation("RewardEventChild")
-  childSanctionRules   SanctionRule[]   @relation("SanctionRuleChild")
+  childRewardRules     RewardRule[]       @relation("RewardRuleChild")
+  childRewardEvents    RewardEvent[]      @relation("RewardEventChild")
+  childSanctionRules   SanctionRule[]     @relation("SanctionRuleChild")
   childSanctions       SanctionInstance[] @relation("SanctionChild")
 
   /// Actions realisees par ce membre en tant que PARENT.
-  authoredTaskDefinitions TaskDefinition[]  @relation("TaskAuthor")
-  decidedTaskOccurrences  TaskOccurrence[]  @relation("OccurrenceDecider")
+  authoredTaskDefinitions TaskDefinition[]   @relation("TaskAuthor")
+  decidedTaskOccurrences  TaskOccurrence[]   @relation("OccurrenceDecider")
   approvedTransactions    PointTransaction[] @relation("TransactionApprover")
-  authoredRewardRules     RewardRule[]      @relation("RewardRuleAuthor")
-  decidedRewardEvents     RewardEvent[]     @relation("RewardEventDecider")
-  authoredSanctionRules   SanctionRule[]    @relation("SanctionRuleAuthor")
+  authoredRewardRules     RewardRule[]       @relation("RewardRuleAuthor")
+  decidedRewardEvents     RewardEvent[]      @relation("RewardEventDecider")
+  revokedRewardEvents     RewardEvent[]      @relation("RewardEventRevoker")
+  authoredSanctionRules   SanctionRule[]     @relation("SanctionRuleAuthor")
   activatedSanctions      SanctionInstance[] @relation("SanctionActivator")
   liftedSanctions         SanctionInstance[] @relation("SanctionLifter")
   ignoredSanctions        SanctionInstance[] @relation("SanctionIgnorer")
 
   notifications Notification[]
-  auditEntries  AuditLog[] @relation("AuditActorMembership")
+  auditEntries  AuditLog[]     @relation("AuditActorMembership")
 
   /// Un utilisateur n'a qu'une adhesion par famille.
   @@unique([familyId, userId])
@@ -361,9 +362,9 @@ model ChildProfile {
   /// Cache du solde. La source de verite reste `PointTransaction`.
   /// Mis a jour dans la MEME transaction SQL que l'ecriture du ledger, et
   /// verrouille (SELECT … FOR UPDATE) pour serialiser les validations concurrentes.
-  cachedBalance     Int       @default(0)
-  transactionCount  Int       @default(0)
-  balanceUpdatedAt  DateTime  @default(now())
+  cachedBalance    Int      @default(0)
+  transactionCount Int      @default(0)
+  balanceUpdatedAt DateTime @default(now())
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -402,9 +403,9 @@ model Invitation {
   createdById String?
   createdBy   FamilyMembership? @relation("InvitationCreator", fields: [createdById], references: [id], onDelete: SetNull)
 
-  consumedAt     DateTime?
+  consumedAt       DateTime?
   consumedByUserId String?
-  consumedBy     User?     @relation("InvitationConsumer", fields: [consumedByUserId], references: [id], onDelete: SetNull)
+  consumedBy       User?     @relation("InvitationConsumer", fields: [consumedByUserId], references: [id], onDelete: SetNull)
 
   revokedAt   DateTime?
   revokedById String?
@@ -529,13 +530,13 @@ model TaskOccurrence {
   pointsPenaltySnapshot Int
   definitionVersion     Int
 
-  claimedAt     DateTime?
+  claimedAt       DateTime?
   claimedByUserId String?
 
-  decidedAt           DateTime?
-  decidedById         String?
-  decidedBy           FamilyMembership? @relation("OccurrenceDecider", fields: [decidedById], references: [id], onDelete: SetNull)
-  decisionNote        String?
+  decidedAt    DateTime?
+  decidedById  String?
+  decidedBy    FamilyMembership? @relation("OccurrenceDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  decisionNote String?
 
   missedDetectedAt DateTime?
 
@@ -647,6 +648,16 @@ model RewardRule {
   title       String
   description String?
 
+  /// La recompense est-elle un privilege qui DURE (temps d'ecran, sortie
+  /// hebdomadaire) plutot qu'un evenement ponctuel (un restaurant deja vecu) ?
+  /// L'application ne peut pas le deviner : c'est la famille qui le declare, a
+  /// la creation du palier. Seule une recompense qui dure peut etre retiree —
+  /// et jamais automatiquement, voir `RewardEvent.revokedAt`.
+  ///
+  /// `false` par defaut : ne rien pouvoir reprendre est le comportement le plus
+  /// sur, et c'etait celui de toutes les regles existantes.
+  revocable Boolean @default(false)
+
   status RewardRuleStatus @default(ACTIVE)
 
   createdById String?
@@ -666,6 +677,9 @@ enum RewardEventStatus {
   PENDING_PARENT_APPROVAL
   GRANTED
   IGNORED
+  /// Recompense accordee puis retiree par un parent. Etat terminal : le palier
+  /// n'est jamais repropose (contrainte unique ci-dessous).
+  REVOKED
 }
 
 /// Une regle de palier n'est obtenable qu'une fois par enfant : la contrainte
@@ -689,10 +703,24 @@ model RewardEvent {
   proposedAt      DateTime @default(now())
   scoreAtProposal Int
 
-  decidedAt   DateTime?
-  decidedById String?
-  decidedBy   FamilyMembership? @relation("RewardEventDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  decidedAt    DateTime?
+  decidedById  String?
+  decidedBy    FamilyMembership? @relation("RewardEventDecider", fields: [decidedById], references: [id], onDelete: SetNull)
   decisionNote String?
+
+  /// Retrait d'une recompense qui durait. Toujours une decision parentale
+  /// explicite : aucun traitement automatique n'ecrit ces colonnes. Le motif
+  /// est obligatoire cote service — l'enfant doit savoir pourquoi.
+  revokedAt        DateTime?
+  revokedById      String?
+  revokedBy        FamilyMembership? @relation("RewardEventRevoker", fields: [revokedById], references: [id], onDelete: SetNull)
+  revocationReason String?
+
+  /// Le parent a vu que le score etait redescendu sous le palier et a choisi de
+  /// LAISSER la recompense. La suggestion de retrait ne reapparait plus : une
+  /// application qui redemande tous les jours finit par obtenir un oui de
+  /// lassitude. Le retrait manuel reste possible a tout moment.
+  keptAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -746,10 +774,10 @@ model SanctionRule {
 
   /// Configuration de levee proposee par defaut ; le parent peut l'ajuster
   /// au moment de l'activation, et c'est l'instance qui fait foi.
-  liftConditionType   LiftConditionType @default(MANUAL)
-  liftScoreThreshold  Int?
+  liftConditionType  LiftConditionType @default(MANUAL)
+  liftScoreThreshold Int?
   /// Duree en jours a compter de l'activation, pour les conditions a base de date.
-  liftDurationDays    Int?
+  liftDurationDays   Int?
 
   status SanctionRuleStatus @default(ACTIVE)
 
@@ -850,6 +878,7 @@ enum NotificationKind {
   TASK_MISSED_CONFIRMED
   POINTS_ADJUSTED
   REWARD_GRANTED
+  REWARD_REVOKED
   SANCTION_ACTIVATED
   SANCTION_LIFTED
 }
@@ -862,9 +891,9 @@ model Notification {
   recipientMembershipId String
   recipient             FamilyMembership @relation(fields: [recipientMembershipId, familyId], references: [id, familyId], onDelete: Cascade)
 
-  kind  NotificationKind
-  title String
-  body  String
+  kind     NotificationKind
+  title    String
+  body     String
   /// Lien interne vers l'ecran concerne.
   linkPath String?
 
@@ -937,6 +966,8 @@ enum AuditAction {
   REWARD_PROPOSED
   REWARD_GRANTED
   REWARD_IGNORED
+  REWARD_REVOKED
+  REWARD_KEPT
 
   SANCTION_RULE_CREATED
   SANCTION_RULE_UPDATED
@@ -1017,11 +1048,11 @@ model JobRun {
 /// Compteur de rate limiting en fenetre fixe. Stocke en base pour rester correct
 /// avec plusieurs instances applicatives, sans dependance a Redis en V1.
 model RateLimitCounter {
-  id             String   @id @default(uuid(7))
-  bucketKey      String
+  id              String   @id @default(uuid(7))
+  bucketKey       String
   windowStartedAt DateTime
-  count          Int      @default(0)
-  expiresAt      DateTime
+  count           Int      @default(0)
+  expiresAt       DateTime
 
   @@unique([bucketKey, windowStartedAt])
   @@index([expiresAt])

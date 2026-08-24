@@ -241,9 +241,51 @@ qu'à un seul événement, **quel que soit son statut**.
 Conséquence : si le score franchit 500, redescend à 480 puis remonte à 510, la
 récompense n'est **pas** reproposée. Un palier ignoré ne l'est pas non plus.
 
-### Une récompense obtenue est acquise
+### Deux natures de récompense — impératif
 
-Elle n'est jamais retirée si le score redescend ensuite. C'est un fait, pas un état.
+L'application ne peut pas deviner si une récompense se reprend. La famille le
+déclare en créant le palier, via `RewardRule.revocable` :
+
+| Nature                  | `revocable` | Exemple                              | Si le score redescend                                               |
+| ----------------------- | ----------- | ------------------------------------ | ------------------------------------------------------------------- |
+| **Ponctuelle** (défaut) | `false`     | Un restaurant, une sortie cinéma     | Rien. C'est vécu, c'est acquis — le retrait n'est même pas proposé. |
+| **Qui dure**            | `true`      | 30 min d'écran, permission du samedi | L'application le **signale**. Un parent retire, ou laisse.          |
+
+`false` par défaut : ne rien pouvoir reprendre est le comportement le plus sûr,
+et c'était celui de toutes les règles existantes avant cette distinction.
+
+### Le retrait est signalé, jamais appliqué — impératif
+
+La suggestion de retrait n'est **pas persistée** : elle est recalculée à chaque
+affichage à partir du score courant (`suggestRewardRevocations`). Elle disparaît
+donc d'elle-même si le score remonte — pas de proposition figée qui dérive de la
+réalité, pas de traitement de rattrapage.
+
+Trois conditions cumulatives pour qu'une récompense soit signalée :
+
+1. la règle est `revocable` ;
+2. aucun parent n'a déjà répondu « laisser » (`keptAt`) ;
+3. `score < thresholdSnapshot`, strictement — par symétrie exacte avec
+   `score >= threshold` à l'obtention. Au score du palier pile, la récompense
+   reste due.
+
+Le retrait lui-même n'est jamais automatique, et **aucun point n'est rendu ni
+retiré** : la récompense n'avait rien coûté, elle n'a rien à rembourser.
+Confondre les deux ferait des points une monnaie.
+
+Le motif est **obligatoire** : l'enfant voit le retrait et sa raison dans son
+historique, et la notification le lui porte.
+
+Un parent peut retirer une récompense `revocable` **à tout moment**, sans que le
+score soit redescendu : l'application n'a pas à lui demander de justifier sa
+décision par un chiffre. Le score ne sert qu'à signaler.
+
+### « Laisser » ferme la question — impératif
+
+Répondre « laisser » pose `keptAt` et la suggestion ne réapparaît plus pour cette
+récompense. Une application qui redemande tous les jours finit par obtenir un oui
+de lassitude, et ce oui-là ne serait pas une décision. Le retrait manuel reste
+possible ensuite.
 
 ### Aucun point n'est consommé — impératif
 
@@ -429,16 +471,17 @@ inactif ni aucune amorce de ces fonctionnalités n'a été laissé dans le dép�
 
 ## 8. Correspondance avec les cas exigés
 
-| Cas | Scénario                                                                                  | Vérifié par                                 |
-| --- | ----------------------------------------------------------------------------------------- | ------------------------------------------- |
-| A   | 100 pts, tâche +20 validée → 120, une transaction                                         | `ledger-and-tasks.test.ts`                  |
-| B   | Deux parents valident simultanément → +20 une fois                                        | `ledger-and-tasks.test.ts` (2 et 4 parents) |
-| C   | Échéance −10 dépassée → aucun retrait ; confirmation → −10                                | `ledger-and-tasks.test.ts`                  |
-| D   | Échéance dépassée puis « Ignorer » → aucune transaction                                   | `ledger-and-tasks.test.ts`                  |
-| E   | Palier 500, 490 → 510 : proposition, puis validation                                      | `rules-engine.test.ts`                      |
-| F   | Score 510 → 480 → 510 : pas de reproposition                                              | `rules-engine.test.ts`                      |
-| G   | Seuil < 100, score 105 → 95 : proposition, rien d'actif                                   | `rules-engine.test.ts`                      |
-| H   | Levée à 150 atteinte : éligible, puis levée par le parent                                 | `rules-engine.test.ts`                      |
-| I   | Jeton réutilisé → refus (dont 5 tentatives simultanées)                                   | `isolation-and-invitations.test.ts`         |
-| J   | Famille A → ressource de Famille B → refus serveur                                        | `isolation-and-invitations.test.ts`         |
-| K   | Refus sans retrait visible dans l'historique ; refus avec retrait appliqué une seule fois | `ledger-and-tasks.test.ts`                  |
+| Cas | Scénario                                                                                                                        | Vérifié par                                 |
+| --- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| A   | 100 pts, tâche +20 validée → 120, une transaction                                                                               | `ledger-and-tasks.test.ts`                  |
+| B   | Deux parents valident simultanément → +20 une fois                                                                              | `ledger-and-tasks.test.ts` (2 et 4 parents) |
+| C   | Échéance −10 dépassée → aucun retrait ; confirmation → −10                                                                      | `ledger-and-tasks.test.ts`                  |
+| D   | Échéance dépassée puis « Ignorer » → aucune transaction                                                                         | `ledger-and-tasks.test.ts`                  |
+| E   | Palier 500, 490 → 510 : proposition, puis validation                                                                            | `rules-engine.test.ts`                      |
+| F   | Score 510 → 480 → 510 : pas de reproposition                                                                                    | `rules-engine.test.ts`                      |
+| G   | Seuil < 100, score 105 → 95 : proposition, rien d'actif                                                                         | `rules-engine.test.ts`                      |
+| H   | Levée à 150 atteinte : éligible, puis levée par le parent                                                                       | `rules-engine.test.ts`                      |
+| I   | Jeton réutilisé → refus (dont 5 tentatives simultanées)                                                                         | `isolation-and-invitations.test.ts`         |
+| J   | Famille A → ressource de Famille B → refus serveur                                                                              | `isolation-and-invitations.test.ts`         |
+| K   | Refus sans retrait visible dans l'historique ; refus avec retrait appliqué une seule fois                                       | `ledger-and-tasks.test.ts`                  |
+| L   | Palier 100 obtenu puis score 70 : retrait signalé, appliqué sans toucher au score ; une récompense ponctuelle refuse le retrait | `rules-engine.test.ts`                      |

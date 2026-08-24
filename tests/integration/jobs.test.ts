@@ -1,3 +1,4 @@
+import { toLocalDate } from '@/domain/time';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { TaskOccurrenceState, TaskRecurrence } from '@/generated/prisma/enums';
 import { prisma } from '@/server/db/prisma';
@@ -56,7 +57,7 @@ describe('idempotence des jobs', () => {
 
 describe('generation des occurrences', () => {
   it('materialise les occurrences a venir sans creer de doublon', async () => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = toLocalDate(new Date(), family.timeZone);
     await createTaskDefinition(owner, {
       childMembershipId: child.membershipId,
       title: 'Devoirs',
@@ -86,7 +87,7 @@ describe('generation des occurrences', () => {
   it('respecte le fuseau horaire de chaque famille', async () => {
     const remote = await createFamily({ name: 'Famille lointaine', timeZone: 'Pacific/Auckland' });
     const remoteChild = await addChild(remote.familyId, { displayName: 'Kiri' });
-    const today = new Date().toISOString().slice(0, 10);
+    const today = toLocalDate(new Date(), family.timeZone);
 
     await createTaskDefinition(remote.ownerActor, {
       childMembershipId: remoteChild.membershipId,
@@ -123,7 +124,7 @@ describe('generation des occurrences', () => {
 
 describe('detection des echeances par le job complet', () => {
   it('signale sans jamais retirer de points', async () => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = toLocalDate(new Date(), family.timeZone);
     await createTaskDefinition(owner, {
       childMembershipId: child.membershipId,
       title: 'Ranger la chambre',
