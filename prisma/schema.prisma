@@ -1,0 +1,1019 @@
+// FamiliPact — schema de donnees.
+//
+// Deux invariants structurels gouvernent ce schema :
+//
+//  1. ISOLATION FAMILIALE. Chaque table metier porte `familyId` et reference
+//     l'enfant concerne via une cle etrangere COMPOSITE
+//     `(childMembershipId, familyId) -> FamilyMembership(id, familyId)`.
+//     Une ligne dont l'enfant appartiendrait a une autre famille est donc
+//     rejetee par PostgreSQL, independamment du code applicatif.
+//
+//  2. LEDGER IMMUABLE. `PointTransaction` et `AuditLog` sont en append-only :
+//     un trigger PostgreSQL (voir la migration `append_only_guards`) rejette
+//     tout UPDATE ou DELETE. Une erreur se corrige par une transaction
+//     inverse (`reversesTransactionId`), jamais par une reecriture.
+//
+//
+//  Nuance : les colonnes d'ACTEUR (`createdById`, `decidedById`, `approvedById`,
+//  `activatedById`, `liftedById`, …) referencent `FamilyMembership(id)` par une
+//  cle simple, et non composite. Une cle composite imposerait `ON DELETE SET NULL`
+//  sur `familyId`, colonne NOT NULL. Le rattachement d'un acteur a sa famille est
+//  donc garanti par la couche service (l'adhesion agissante est toujours chargee
+//  avec un filtre `familyId`) et verifie par les tests d'isolation multi-tenant.
+//
+// Voir docs/data-model.md pour le diagramme et les justifications.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Identite & authentification
+// ---------------------------------------------------------------------------
+
+/// Un compte ADULT se connecte par email + mot de passe + TOTP obligatoire.
+/// Un compte CHILD se connecte par identifiant de connexion + mot de passe,
+/// sans email et sans MFA obligatoire.
+enum UserKind {
+  ADULT
+  CHILD
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+model User {
+  id     String     @id @default(uuid(7))
+  kind   UserKind
+  status UserStatus @default(ACTIVE)
+
+  /// Toujours stocke normalise (trim + minuscules). Null pour les enfants.
+  email String? @unique
+
+  /// Identifiant de connexion des enfants (ex: "lucas-4f2a"). Null pour les adultes.
+  /// Volontairement distinct de `displayName` afin que renommer un enfant dans
+  /// l'interface ne casse pas ses identifiants de connexion.
+  loginId String? @unique
+
+  displayName String
+
+  passwordHash      String
+  passwordUpdatedAt DateTime @default(now())
+
+  /// Compteur de brute force par compte, complete par un rate limit par IP.
+  failedLoginCount Int       @default(0)
+  lockedUntil      DateTime?
+  lastLoginAt      DateTime?
+
+  locale String @default("fr")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  totpCredential     TotpCredential?
+  recoveryCodes      RecoveryCode[]
+  webAuthnCredential WebAuthnCredential[]
+  webAuthnChallenges WebAuthnChallenge[]
+  sessions           Session[]
+  memberships        FamilyMembership[]
+  consumedInvitation Invitation[]         @relation("InvitationConsumer")
+  auditEntries       AuditLog[]           @relation("AuditActorUser")
+
+  @@index([kind, status])
+}
+
+/// Secret TOTP (RFC 6238). Le secret est chiffre au repos avec
+/// AES-256-GCM et la cle `TOTP_ENCRYPTION_KEY` (jamais en base).
+model TotpCredential {
+  id     String @id @default(uuid(7))
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  secretCiphertext String
+  secretNonce      String
+  secretAuthTag    String
+
+  algorithm String @default("SHA1")
+  digits    Int    @default(6)
+  period    Int    @default(30)
+
+  /// Null tant que le premier code a 6 chiffres n'a pas ete valide par le serveur.
+  confirmedAt DateTime?
+
+  /// Dernier pas de temps consomme : empeche le rejeu d'un meme code.
+  lastUsedTimeStep BigInt?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Codes de recuperation a usage unique. Stockes hashes (Argon2id), jamais en clair.
+model RecoveryCode {
+  id     String @id @default(uuid(7))
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  codeHash String
+  /// Prefixe non secret, uniquement pour afficher "XXXX-…" dans la liste.
+  label     String
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, usedAt])
+}
+
+model WebAuthnCredential {
+  id     String @id @default(uuid(7))
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// credentialId encode en base64url.
+  credentialId String @unique
+  publicKey    String
+  counter      BigInt @default(0)
+
+  transports     String[] @default([])
+  deviceType     String?
+  backedUp       Boolean  @default(false)
+  /// Nom lisible choisi par l'utilisateur ("iPhone de Marie").
+  nickname       String
+  aaguid         String?
+  /// True pour un authentificateur de plateforme (Face ID / Touch ID / Windows Hello).
+  platformBound  Boolean  @default(false)
+
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+
+  @@index([userId])
+}
+
+enum WebAuthnChallengeType {
+  REGISTRATION
+  AUTHENTICATION
+}
+
+/// Les challenges WebAuthn sont conserves cote serveur : la PWA peut tourner sur
+/// plusieurs instances et un challenge ne doit jamais etre rejouable.
+model WebAuthnChallenge {
+  id     String  @id @default(uuid(7))
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type      WebAuthnChallengeType
+  challenge String                @unique
+  expiresAt DateTime
+  /// Un challenge consomme ne peut plus servir.
+  consumedAt DateTime?
+  createdAt  DateTime              @default(now())
+
+  @@index([expiresAt])
+}
+
+/// Cycle de vie d'une session.
+///
+/// PENDING_MFA_ENROLLMENT : mot de passe verifie, mais le compte adulte n'a pas
+///   encore configure son TOTP. La session ne donne acces qu'a l'enrolement.
+/// PENDING_MFA : mot de passe verifie, TOTP configure mais pas encore fourni.
+/// ACTIVE : authentification complete.
+enum SessionStatus {
+  PENDING_MFA_ENROLLMENT
+  PENDING_MFA
+  ACTIVE
+}
+
+model Session {
+  id     String @id @default(uuid(7))
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// SHA-256 du token de session ; le token brut n'existe que dans le cookie.
+  tokenHash String        @unique
+  status    SessionStatus
+
+  /// Methodes reellement utilisees ("password", "totp", "recovery_code", "passkey").
+  authMethods String[] @default([])
+
+  /// Fenetre de re-authentification forte pour les operations sensibles (step-up).
+  elevatedUntil DateTime?
+
+  createdAt         DateTime @default(now())
+  lastSeenAt        DateTime @default(now())
+  /// Expiration glissante (inactivite).
+  idleExpiresAt     DateTime
+  /// Expiration absolue, non prolongeable.
+  absoluteExpiresAt DateTime
+
+  revokedAt     DateTime?
+  revokedReason String?
+
+  /// L'adresse IP n'est jamais stockee en clair : seul un HMAC est conserve.
+  ipHash          String?
+  userAgentDigest String?
+
+  @@index([userId, revokedAt])
+  @@index([idleExpiresAt])
+}
+
+// ---------------------------------------------------------------------------
+// Famille, membres, permissions
+// ---------------------------------------------------------------------------
+
+enum FamilyRole {
+  OWNER
+  ADMIN
+  PARENT
+  CHILD
+}
+
+enum MembershipStatus {
+  ACTIVE
+  REMOVED
+}
+
+model Family {
+  id   String @id @default(uuid(7))
+  name String
+
+  /// Fuseau IANA (ex: "Europe/Paris"). Toute logique de date locale s'y refere.
+  timeZone String @default("Europe/Paris")
+  locale   String @default("fr")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships       FamilyMembership[]
+  invitations       Invitation[]
+  taskDefinitions   TaskDefinition[]
+  taskOccurrences   TaskOccurrence[]
+  pointTransactions PointTransaction[]
+  rewardRules       RewardRule[]
+  rewardEvents      RewardEvent[]
+  sanctionRules     SanctionRule[]
+  sanctionInstances SanctionInstance[]
+  notifications     Notification[]
+  auditLogs         AuditLog[]
+}
+
+model FamilyMembership {
+  id       String @id @default(uuid(7))
+  familyId String
+  family   Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  role   FamilyRole
+  status MembershipStatus @default(ACTIVE)
+
+  joinedAt  DateTime  @default(now())
+  removedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  permissions ParentPermissionGrant[]
+  childProfile ChildProfile?
+
+  createdInvitations Invitation[] @relation("InvitationCreator")
+  revokedInvitations Invitation[] @relation("InvitationRevoker")
+
+  /// Taches dont cette adhesion est l'ENFANT concerne.
+  childTaskDefinitions TaskDefinition[] @relation("TaskChild")
+  childTaskOccurrences TaskOccurrence[] @relation("OccurrenceChild")
+  childTransactions    PointTransaction[] @relation("TransactionChild")
+  childRewardRules     RewardRule[]     @relation("RewardRuleChild")
+  childRewardEvents    RewardEvent[]    @relation("RewardEventChild")
+  childSanctionRules   SanctionRule[]   @relation("SanctionRuleChild")
+  childSanctions       SanctionInstance[] @relation("SanctionChild")
+
+  /// Actions realisees par ce membre en tant que PARENT.
+  authoredTaskDefinitions TaskDefinition[]  @relation("TaskAuthor")
+  decidedTaskOccurrences  TaskOccurrence[]  @relation("OccurrenceDecider")
+  approvedTransactions    PointTransaction[] @relation("TransactionApprover")
+  authoredRewardRules     RewardRule[]      @relation("RewardRuleAuthor")
+  decidedRewardEvents     RewardEvent[]     @relation("RewardEventDecider")
+  authoredSanctionRules   SanctionRule[]    @relation("SanctionRuleAuthor")
+  activatedSanctions      SanctionInstance[] @relation("SanctionActivator")
+  liftedSanctions         SanctionInstance[] @relation("SanctionLifter")
+  ignoredSanctions        SanctionInstance[] @relation("SanctionIgnorer")
+
+  notifications Notification[]
+  auditEntries  AuditLog[] @relation("AuditActorMembership")
+
+  /// Un utilisateur n'a qu'une adhesion par famille.
+  @@unique([familyId, userId])
+  /// Cible des cles etrangeres composites qui garantissent l'isolation familiale.
+  @@unique([id, familyId])
+  @@index([familyId, role, status])
+}
+
+/// Permissions octroyables a un membre PARENT.
+/// OWNER et ADMIN derivent leurs permissions de leur role (voir src/domain/permissions).
+/// MEMBER_MANAGE, PERMISSION_MANAGE, ownership et suppression de famille ne sont
+/// PAS octroyables : ils restent l'apanage du OWNER.
+enum ParentPermission {
+  TASK_MANAGE
+  TASK_APPROVE
+  TASK_CONFIRM_MISSED
+  POINTS_ADJUST
+  RULE_MANAGE
+  REWARD_APPROVE
+  SANCTION_ACTIVATE
+  SANCTION_LIFT
+  CHILD_MANAGE
+  FAMILY_SETTINGS_MANAGE
+  AUDIT_VIEW
+}
+
+model ParentPermissionGrant {
+  id           String           @id @default(uuid(7))
+  membershipId String
+  membership   FamilyMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  permission ParentPermission
+  grantedAt  DateTime         @default(now())
+  grantedBy  String?
+
+  @@unique([membershipId, permission])
+  @@index([membershipId])
+}
+
+/// Donnees propres a un enfant. Volontairement minimales (voir docs/privacy.md).
+model ChildProfile {
+  id           String           @id @default(uuid(7))
+  membershipId String           @unique
+  membership   FamilyMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  familyId String
+
+  /// Avatar choisi parmi un jeu d'illustrations embarquees : aucun upload,
+  /// donc aucune donnee d'image d'un mineur n'est stockee.
+  avatarKey String @default("fox")
+  colorKey  String @default("sage")
+
+  /// Cache du solde. La source de verite reste `PointTransaction`.
+  /// Mis a jour dans la MEME transaction SQL que l'ecriture du ledger, et
+  /// verrouille (SELECT … FOR UPDATE) pour serialiser les validations concurrentes.
+  cachedBalance     Int       @default(0)
+  transactionCount  Int       @default(0)
+  balanceUpdatedAt  DateTime  @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([familyId])
+}
+
+// ---------------------------------------------------------------------------
+// Invitations
+// ---------------------------------------------------------------------------
+
+enum InvitationStatus {
+  PENDING
+  CONSUMED
+  REVOKED
+}
+
+/// Le "code famille" est un token d'invitation a usage unique, lie a une famille
+/// ET a un role cible. Un token CHILD ne peut donc jamais creer un compte PARENT.
+model Invitation {
+  id       String @id @default(uuid(7))
+  familyId String
+  family   Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  targetRole FamilyRole
+  status     InvitationStatus @default(PENDING)
+
+  /// SHA-256 du token. Le token brut n'est affiche qu'une fois, a la creation.
+  tokenHash String @unique
+
+  /// Libelle d'aide ("Invitation pour Lucas"), jamais le token.
+  label String?
+
+  expiresAt DateTime
+
+  createdById String?
+  createdBy   FamilyMembership? @relation("InvitationCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  consumedAt     DateTime?
+  consumedByUserId String?
+  consumedBy     User?     @relation("InvitationConsumer", fields: [consumedByUserId], references: [id], onDelete: SetNull)
+
+  revokedAt   DateTime?
+  revokedById String?
+  revokedBy   FamilyMembership? @relation("InvitationRevoker", fields: [revokedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([familyId, status])
+  @@index([expiresAt])
+}
+
+// ---------------------------------------------------------------------------
+// Taches
+// ---------------------------------------------------------------------------
+
+/// ONE_OFF    : une seule echeance, definie par `dueAt`.
+/// DAILY      : tous les jours.
+/// WEEKLY_DAYS: certains jours de la semaine (couvre aussi "hebdomadaire" avec un
+///              seul jour). Choix delibere de ne pas implementer une RRULE complete
+///              en V1 (voir docs/business-rules.md).
+enum TaskRecurrence {
+  ONE_OFF
+  DAILY
+  WEEKLY_DAYS
+}
+
+enum TaskDefinitionStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+model TaskDefinition {
+  id       String @id @default(uuid(7))
+  familyId String
+  family   Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  childMembershipId String
+  child             FamilyMembership @relation("TaskChild", fields: [childMembershipId, familyId], references: [id, familyId], onDelete: Cascade)
+
+  title       String
+  description String?
+
+  /// Points credites si la tache est validee par un parent.
+  pointsAward   Int
+  /// Points retires si un parent CONFIRME que la tache n'a pas ete faite.
+  pointsPenalty Int @default(0)
+
+  recurrence TaskRecurrence
+
+  /// Date locale (fuseau de la famille) de premiere application, format YYYY-MM-DD.
+  startDate String
+  /// Date locale de fin, incluse. Null = sans fin.
+  endDate   String?
+
+  /// Heure limite locale "HH:mm" pour les taches recurrentes.
+  dueTime String?
+  /// Instant limite absolu pour les taches ponctuelles.
+  dueAt   DateTime?
+
+  /// Jours de la semaine ISO (1 = lundi … 7 = dimanche) pour WEEKLY_DAYS.
+  weekdays Int[] @default([])
+
+  status TaskDefinitionStatus @default(ACTIVE)
+
+  /// Incremente a chaque modification. Chaque occurrence memorise la version
+  /// utilisee : modifier un modele ne reecrit jamais le passe.
+  version Int @default(1)
+
+  createdById String?
+  createdBy   FamilyMembership? @relation("TaskAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  occurrences TaskOccurrence[]
+
+  @@unique([id, familyId])
+  @@index([familyId, status])
+  @@index([childMembershipId, status])
+}
+
+/// Machine d'etat d'une occurrence.
+///
+/// TODO ──(enfant)──▶ CLAIMED_DONE ──(parent)──▶ APPROVED | REJECTED
+///   │
+///   └──(job d'echeance)──▶ MISSED_PENDING_REVIEW ──(parent)──▶ MISSED_CONFIRMED | MISSED_IGNORED
+///
+/// Aucune transition n'ecrit de points sans decision explicite d'un parent.
+enum TaskOccurrenceState {
+  TODO
+  CLAIMED_DONE
+  APPROVED
+  REJECTED
+  MISSED_PENDING_REVIEW
+  MISSED_CONFIRMED
+  MISSED_IGNORED
+}
+
+model TaskOccurrence {
+  id       String @id @default(uuid(7))
+  familyId String
+  family   Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  taskDefinitionId String
+  taskDefinition   TaskDefinition @relation(fields: [taskDefinitionId, familyId], references: [id, familyId], onDelete: Cascade)
+
+  childMembershipId String
+  child             FamilyMembership @relation("OccurrenceChild", fields: [childMembershipId, familyId], references: [id, familyId], onDelete: Cascade)
+
+  /// Date locale de l'occurrence (YYYY-MM-DD, fuseau famille).
+  occurrenceDate String
+  /// Echeance absolue, calculee depuis la date locale + heure limite + fuseau.
+  dueAt          DateTime
+
+  state TaskOccurrenceState @default(TODO)
+
+  /// Instantanes pris a la generation : une modification ulterieure du modele
+  /// ne change ni le libelle ni les points d'une occurrence deja creee.
+  titleSnapshot         String
+  pointsAwardSnapshot   Int
+  pointsPenaltySnapshot Int
+  definitionVersion     Int
+
+  claimedAt     DateTime?
+  claimedByUserId String?
+
+  decidedAt           DateTime?
+  decidedById         String?
+  decidedBy           FamilyMembership? @relation("OccurrenceDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  decisionNote        String?
+
+  missedDetectedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Idempotence de la generation des occurrences recurrentes.
+  @@unique([taskDefinitionId, occurrenceDate])
+  @@unique([id, familyId])
+  @@index([familyId, state])
+  @@index([childMembershipId, state])
+  @@index([familyId, dueAt, state])
+  @@index([state, dueAt])
+}
+
+// ---------------------------------------------------------------------------
+// Ledger de points
+// ---------------------------------------------------------------------------
+
+enum PointTransactionType {
+  TASK_APPROVED
+  TASK_MISSED
+  MANUAL_ADJUSTMENT
+  REVERSAL
+}
+
+enum PointTransactionSource {
+  TASK_OCCURRENCE
+  MANUAL
+  REVERSAL
+}
+
+/// Journal APPEND-ONLY : la table est protegee par un trigger qui rejette
+/// tout UPDATE et tout DELETE (hors suppression en cascade d'une famille).
+/// Le solde d'un enfant est la somme des `delta` de ses transactions.
+model PointTransaction {
+  id       String @id @default(uuid(7))
+  familyId String
+  family   Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  childMembershipId String
+  child             FamilyMembership @relation("TransactionChild", fields: [childMembershipId, familyId], references: [id, familyId], onDelete: Cascade)
+
+  /// Signe : positif pour un credit, negatif pour un retrait. Jamais zero.
+  delta Int
+
+  type       PointTransactionType
+  sourceType PointTransactionSource
+  /// Id de l'occurrence, de la transaction annulee, … selon `sourceType`.
+  sourceId   String?
+
+  label  String
+  /// Motif obligatoire pour MANUAL_ADJUSTMENT et REVERSAL.
+  reason String?
+
+  /// Membre parent qui a pris la decision. Null seulement pour les ecritures
+  /// systeme (aucune en V1 : toute ecriture est validee par un parent).
+  approvedById String?
+  approvedBy   FamilyMembership? @relation("TransactionApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  /// Transaction que celle-ci annule. Unique : on n'annule qu'une seule fois.
+  reversesTransactionId String?           @unique
+  reverses              PointTransaction? @relation("Reversal", fields: [reversesTransactionId], references: [id], onDelete: Cascade)
+  reversedBy            PointTransaction? @relation("Reversal")
+
+  /// Cle d'idempotence facultative fournie par le client (anti double-clic).
+  idempotencyKey String? @unique
+
+  effectiveAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  /// Garantit qu'une occurrence ne peut etre creditee ou penalisee qu'une fois,
+  /// meme si deux parents valident simultanement.
+  /// (PostgreSQL considere les NULL comme distincts : les ajustements manuels,
+  ///  dont `sourceId` est NULL, ne sont pas contraints.)
+  @@unique([sourceType, sourceId, type])
+  @@index([familyId, createdAt])
+  @@index([childMembershipId, createdAt])
+  @@index([familyId, type, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Recompenses
+// ---------------------------------------------------------------------------
+
+enum RewardRuleStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+model RewardRule {
+  id       String @id @default(uuid(7))
+  familyId String
+  family   Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  childMembershipId String
+  child             FamilyMembership @relation("RewardRuleChild", fields: [childMembershipId, familyId], references: [id, familyId], onDelete: Cascade)
+
+  /// Palier a atteindre (score >= threshold).
+  threshold   Int
+  title       String
+  description String?
+
+  status RewardRuleStatus @default(ACTIVE)
+
+  createdById String?
+  createdBy   FamilyMembership? @relation("RewardRuleAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  events RewardEvent[]
+
+  @@unique([id, familyId])
+  @@index([familyId, status])
+  @@index([childMembershipId, status, threshold])
+}
+
+enum RewardEventStatus {
+  PENDING_PARENT_APPROVAL
+  GRANTED
+  IGNORED
+}
+
+/// Une regle de palier n'est obtenable qu'une fois par enfant : la contrainte
+/// unique ci-dessous empeche toute reproposition si le score repasse le seuil.
+model RewardEvent {
+  id       String @id @default(uuid(7))
+  familyId String
+  family   Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  rewardRuleId String
+  rewardRule   RewardRule @relation(fields: [rewardRuleId, familyId], references: [id, familyId], onDelete: Cascade)
+
+  childMembershipId String
+  child             FamilyMembership @relation("RewardEventChild", fields: [childMembershipId, familyId], references: [id, familyId], onDelete: Cascade)
+
+  status RewardEventStatus @default(PENDING_PARENT_APPROVAL)
+
+  titleSnapshot     String
+  thresholdSnapshot Int
+
+  proposedAt      DateTime @default(now())
+  scoreAtProposal Int
+
+  decidedAt   DateTime?
+  decidedById String?
+  decidedBy   FamilyMembership? @relation("RewardEventDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  decisionNote String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([rewardRuleId, childMembershipId])
+  @@index([familyId, status])
+  @@index([childMembershipId, status])
+}
+
+// ---------------------------------------------------------------------------
+// Sanctions
+// ---------------------------------------------------------------------------
+
+enum SanctionRuleStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum ScoreComparator {
+  LT
+  LTE
+}
+
+/// MANUAL        : le parent decide quand lever.
+/// DATE          : levee eligible a partir d'un instant.
+/// SCORE         : levee eligible quand le score atteint un palier.
+/// DATE_AND_SCORE: les deux conditions.
+/// DATE_OR_SCORE : l'une des deux suffit.
+enum LiftConditionType {
+  MANUAL
+  DATE
+  SCORE
+  DATE_AND_SCORE
+  DATE_OR_SCORE
+}
+
+model SanctionRule {
+  id       String @id @default(uuid(7))
+  familyId String
+  family   Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  childMembershipId String
+  child             FamilyMembership @relation("SanctionRuleChild", fields: [childMembershipId, familyId], references: [id, familyId], onDelete: Cascade)
+
+  threshold  Int
+  comparator ScoreComparator @default(LT)
+
+  title       String
+  description String?
+
+  /// Configuration de levee proposee par defaut ; le parent peut l'ajuster
+  /// au moment de l'activation, et c'est l'instance qui fait foi.
+  liftConditionType   LiftConditionType @default(MANUAL)
+  liftScoreThreshold  Int?
+  /// Duree en jours a compter de l'activation, pour les conditions a base de date.
+  liftDurationDays    Int?
+
+  status SanctionRuleStatus @default(ACTIVE)
+
+  /// Detection par FRANCHISSEMENT de seuil, pas par etat.
+  /// `armed` = true lorsque le score est au-dessus du seuil : le prochain passage
+  /// sous le seuil declenche UNE proposition, puis desarme la regle. Tant que le
+  /// score reste sous le seuil, plus rien n'est propose.
+  armed Boolean @default(true)
+
+  createdById String?
+  createdBy   FamilyMembership? @relation("SanctionRuleAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  instances SanctionInstance[]
+
+  @@unique([id, familyId])
+  @@index([familyId, status])
+  @@index([childMembershipId, status])
+}
+
+/// PROPOSED ──(parent active)──▶ ACTIVE ──(condition atteinte)──▶ LIFT_ELIGIBLE
+///     │                            │                                  │
+///     └──(parent ignore)──▶ IGNORED└────────(parent leve)─────────────▶ LIFTED
+///
+/// Aucune sanction ne devient ACTIVE ni LIFTED sans decision explicite d'un parent.
+enum SanctionInstanceStatus {
+  PROPOSED
+  IGNORED
+  ACTIVE
+  LIFT_ELIGIBLE
+  LIFTED
+  CANCELLED
+}
+
+model SanctionInstance {
+  id       String @id @default(uuid(7))
+  familyId String
+  family   Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  sanctionRuleId String
+  sanctionRule   SanctionRule @relation(fields: [sanctionRuleId, familyId], references: [id, familyId], onDelete: Cascade)
+
+  childMembershipId String
+  child             FamilyMembership @relation("SanctionChild", fields: [childMembershipId, familyId], references: [id, familyId], onDelete: Cascade)
+
+  status SanctionInstanceStatus @default(PROPOSED)
+
+  titleSnapshot       String
+  descriptionSnapshot String?
+  thresholdSnapshot   Int
+  comparatorSnapshot  ScoreComparator
+
+  proposedAt      DateTime @default(now())
+  scoreAtProposal Int
+
+  /// Conditions de levee figees a l'activation.
+  liftConditionType  LiftConditionType @default(MANUAL)
+  liftAt             DateTime?
+  liftScoreThreshold Int?
+
+  activatedAt   DateTime?
+  activatedById String?
+  activatedBy   FamilyMembership? @relation("SanctionActivator", fields: [activatedById], references: [id], onDelete: SetNull)
+
+  ignoredAt   DateTime?
+  ignoredById String?
+  ignoredBy   FamilyMembership? @relation("SanctionIgnorer", fields: [ignoredById], references: [id], onDelete: SetNull)
+
+  liftEligibleAt DateTime?
+
+  liftedAt   DateTime?
+  liftedById String?
+  liftedBy   FamilyMembership? @relation("SanctionLifter", fields: [liftedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([familyId, status])
+  @@index([childMembershipId, status])
+  @@index([status, liftAt])
+}
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+enum NotificationKind {
+  TASK_CLAIM_PENDING
+  TASK_MISSED_PENDING
+  REWARD_PROPOSED
+  SANCTION_PROPOSED
+  SANCTION_LIFT_ELIGIBLE
+  TASK_APPROVED
+  TASK_REJECTED
+  TASK_MISSED_CONFIRMED
+  POINTS_ADJUSTED
+  REWARD_GRANTED
+  SANCTION_ACTIVATED
+  SANCTION_LIFTED
+}
+
+model Notification {
+  id       String @id @default(uuid(7))
+  familyId String
+  family   Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  recipientMembershipId String
+  recipient             FamilyMembership @relation(fields: [recipientMembershipId, familyId], references: [id, familyId], onDelete: Cascade)
+
+  kind  NotificationKind
+  title String
+  body  String
+  /// Lien interne vers l'ecran concerne.
+  linkPath String?
+
+  /// Cle de deduplication : un job rejoue ne cree pas de doublon.
+  dedupeKey String? @unique
+
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([recipientMembershipId, readAt, createdAt])
+  @@index([familyId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Audit
+// ---------------------------------------------------------------------------
+
+enum AuditAction {
+  PARENT_LOGIN_SUCCEEDED
+  PARENT_LOGIN_FAILED
+  CHILD_LOGIN_SUCCEEDED
+  CHILD_LOGIN_FAILED
+  MFA_ENROLLED
+  MFA_VERIFICATION_FAILED
+  MFA_RESET
+  RECOVERY_CODES_GENERATED
+  RECOVERY_CODE_USED
+  PASSKEY_REGISTERED
+  PASSKEY_REMOVED
+  SESSION_REVOKED
+  STEP_UP_GRANTED
+  PASSWORD_CHANGED
+
+  FAMILY_CREATED
+  FAMILY_SETTINGS_UPDATED
+  FAMILY_DELETED
+  OWNERSHIP_TRANSFERRED
+
+  INVITATION_CREATED
+  INVITATION_REVOKED
+  INVITATION_CONSUMED
+  INVITATION_REJECTED
+
+  MEMBER_ADDED
+  MEMBER_REMOVED
+  MEMBER_ROLE_CHANGED
+  MEMBER_PERMISSIONS_UPDATED
+
+  CHILD_CREATED
+  CHILD_UPDATED
+  CHILD_DELETED
+
+  TASK_CREATED
+  TASK_UPDATED
+  TASK_ARCHIVED
+  TASK_CLAIMED
+  TASK_APPROVED
+  TASK_REJECTED
+  TASK_MISSED_DETECTED
+  TASK_MISSED_CONFIRMED
+  TASK_MISSED_IGNORED
+
+  POINTS_ADJUSTED
+  POINTS_REVERSED
+
+  REWARD_RULE_CREATED
+  REWARD_RULE_UPDATED
+  REWARD_RULE_ARCHIVED
+  REWARD_PROPOSED
+  REWARD_GRANTED
+  REWARD_IGNORED
+
+  SANCTION_RULE_CREATED
+  SANCTION_RULE_UPDATED
+  SANCTION_RULE_ARCHIVED
+  SANCTION_PROPOSED
+  SANCTION_ACTIVATED
+  SANCTION_IGNORED
+  SANCTION_LIFT_ELIGIBLE
+  SANCTION_LIFTED
+
+  AUTHORIZATION_DENIED
+}
+
+/// Journal d'audit, distinct du ledger de points et lui aussi append-only.
+/// Ne contient jamais de secret (mot de passe, secret TOTP, code de recuperation,
+/// token d'invitation brut). Voir docs/security.md.
+model AuditLog {
+  id       String  @id @default(uuid(7))
+  familyId String?
+  family   Family? @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  actorUserId String?
+  actorUser   User?   @relation("AuditActorUser", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  actorMembershipId String?
+  actorMembership   FamilyMembership? @relation("AuditActorMembership", fields: [actorMembershipId], references: [id], onDelete: SetNull)
+
+  /// Denormalise : l'audit reste lisible meme apres suppression du membre.
+  actorLabel String?
+
+  action     AuditAction
+  targetType String?
+  targetId   String?
+
+  /// Resume lisible, deja localise cote serveur.
+  summary String
+
+  /// Contexte structure, filtre par une liste blanche de cles non sensibles.
+  metadata Json?
+
+  ipHash          String?
+  userAgentDigest String?
+
+  createdAt DateTime @default(now())
+
+  @@index([familyId, createdAt])
+  @@index([familyId, action, createdAt])
+  @@index([actorUserId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Infrastructure : jobs & rate limiting
+// ---------------------------------------------------------------------------
+
+enum JobRunStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+/// Verrou d'idempotence des jobs planifies : `(jobName, runKey)` est unique,
+/// donc une double execution sur le meme creneau ne produit pas deux effets.
+model JobRun {
+  id      String @id @default(uuid(7))
+  jobName String
+  runKey  String
+
+  status         JobRunStatus @default(RUNNING)
+  startedAt      DateTime     @default(now())
+  finishedAt     DateTime?
+  itemsProcessed Int          @default(0)
+  error          String?
+
+  @@unique([jobName, runKey])
+  @@index([jobName, startedAt])
+}
+
+/// Compteur de rate limiting en fenetre fixe. Stocke en base pour rester correct
+/// avec plusieurs instances applicatives, sans dependance a Redis en V1.
+model RateLimitCounter {
+  id             String   @id @default(uuid(7))
+  bucketKey      String
+  windowStartedAt DateTime
+  count          Int      @default(0)
+  expiresAt      DateTime
+
+  @@unique([bucketKey, windowStartedAt])
+  @@index([expiresAt])
+}
