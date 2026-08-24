@@ -1,0 +1,41 @@
+{
+  "id": "/",
+  "name": "FamiliPact — Les regles familiales, simplement.",
+  "short_name": "FamiliPact",
+  "description": "Definissez un cadre familial clair : taches, points, recompenses et sanctions, avec une decision parentale explicite a chaque etape.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait-primary",
+  "background_color": "#fbfaf7",
+  "theme_color": "#fbfaf7",
+  "lang": "fr",
+  "dir": "ltr",
+  "categories": ["lifestyle", "productivity"],
+  "icons": [
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    {
+      "src": "/icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Actions requises",
+      "short_name": "Validations",
+      "url": "/parent/validations",
+      "description": "Taches et propositions en attente de decision"
+    },
+    {
+      "name": "Mes taches",
+      "short_name": "Mes taches",
+      "url": "/enfant/taches",
+      "description": "Voir mes taches du jour"
+    }
+  ]
+}
