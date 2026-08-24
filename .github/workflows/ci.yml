@@ -1,0 +1,140 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Une nouvelle poussee annule la verification precedente de la meme branche :
+# inutile de payer deux fois pour un etat qui n'existe plus.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+  # Secrets FACTICES, valables uniquement pour la CI : ils ne protegent aucune
+  # donnee reelle et ne doivent jamais etre reutilises ailleurs.
+  TOTP_ENCRYPTION_KEY: dGVzdC1vbmx5LXRvdHAta2V5LTMyLWJ5dGVzLXh4eHg=
+  LOG_PEPPER_KEY: dGVzdC1vbmx5LWxvZy1wZXBwZXIta2V5LTMyLWJ5dGVz
+  APP_ORIGIN: http://127.0.0.1:3100
+  WEBAUTHN_RP_ID: 127.0.0.1
+  WEBAUTHN_RP_NAME: FamiliPact
+  JOB_RUNNER_TOKEN: ci-job-runner-token-not-a-real-secret
+  DEFAULT_FAMILY_TIMEZONE: Europe/Paris
+
+jobs:
+  quality:
+    name: Format, lint et types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      # Le client Prisma est genere : sans lui, rien ne compile.
+      - run: npx prisma generate
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+
+  unit:
+    name: Tests unitaires du domaine
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run test:unit
+
+  integration:
+    name: Tests d'integration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: familipact
+          POSTGRES_PASSWORD: familipact
+          POSTGRES_DB: familipact_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://familipact:familipact@127.0.0.1:5432/familipact_test?schema=public
+      TEST_DATABASE_URL: postgresql://familipact:familipact@127.0.0.1:5432/familipact_test?schema=public
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      # Les tests d'integration verifient les garanties portees par PostgreSQL :
+      # ils tournent contre une vraie base, jamais contre un double.
+      - run: npm run test:integration
+
+  e2e:
+    name: Tests de bout en bout
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: familipact
+          POSTGRES_PASSWORD: familipact
+          POSTGRES_DB: familipact_e2e
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://familipact:familipact@127.0.0.1:5432/familipact_e2e?schema=public
+      TEST_DATABASE_URL: postgresql://familipact:familipact@127.0.0.1:5432/familipact_e2e?schema=public
+      E2E_PORT: '3100'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      # Les migrations sont appliquees telles quelles : la CI verifie donc aussi
+      # qu'elles s'installent proprement sur une base vierge.
+      - run: npx prisma migrate deploy
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  build:
+    name: Build de production
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+        env:
+          DATABASE_URL: postgresql://familipact:familipact@127.0.0.1:5432/build?schema=public

@@ -42,12 +42,25 @@ export interface FamilyActor {
  * `x-forwarded-for` n'est digne de confiance que derriere un proxy maitrise ;
  * il ne sert ici qu'a alimenter le rate limiting et des journaux pseudonymises,
  * jamais a autoriser quoi que ce soit.
+ *
+ * Hors d'une requete HTTP — job planifie, seed, test — il n'existe simplement
+ * aucun contexte reseau : la fonction rend alors un contexte vide plutot que
+ * d'echouer. Un service reste ainsi appelable depuis n'importe quel point
+ * d'entree, ce qui est precisement la propriete recherchee pour la couche
+ * metier.
  */
 export const getRequestContext = async (): Promise<SessionRequestContext> => {
-  const headerList = await headers();
-  const forwardedFor = headerList.get('x-forwarded-for');
-  const ip = forwardedFor?.split(',')[0]?.trim() ?? headerList.get('x-real-ip') ?? null;
-  return { ip: ip !== null && ip.length > 0 ? ip : null, userAgent: headerList.get('user-agent') };
+  try {
+    const headerList = await headers();
+    const forwardedFor = headerList.get('x-forwarded-for');
+    const ip = forwardedFor?.split(',')[0]?.trim() ?? headerList.get('x-real-ip') ?? null;
+    return {
+      ip: ip !== null && ip.length > 0 ? ip : null,
+      userAgent: headerList.get('user-agent'),
+    };
+  } catch {
+    return { ip: null, userAgent: null };
+  }
 };
 
 /**

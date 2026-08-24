@@ -17,7 +17,7 @@ import { requireCapability, type FamilyActor } from '@/server/auth/context';
 import { prisma } from '@/server/db/prisma';
 import { notify } from '@/server/notifications/notify';
 import { getBalance } from './ledger';
-import { evaluateChildRules, initialArmedState } from './rules-engine';
+import { INITIAL_ARMED_STATE, evaluateChildRules } from './rules-engine';
 
 /**
  * Sanctions.
@@ -90,10 +90,10 @@ export const createSanctionRule = async (
         liftConditionType: parsed.liftConditionType,
         liftScoreThreshold: parsed.liftScoreThreshold,
         liftDurationDays: parsed.liftDurationDays,
-        // La regle nait « armee » si le score est au-dessus du seuil. Sinon elle
-        // nait desarmee et l'evaluation ci-dessous produit une proposition
-        // immediate : le parent decrit une situation deja constatee.
-        armed: initialArmedState(score, parsed.threshold, parsed.comparator),
+        // La regle nait armee ; l'evaluation qui suit decide s'il faut
+        // proposer tout de suite (situation deja constatee) ou attendre le
+        // premier franchissement.
+        armed: INITIAL_ARMED_STATE,
         createdById: actor.membershipId,
       },
       select: { id: true },
@@ -158,11 +158,9 @@ export const updateSanctionRule = async (
         liftConditionType: parsed.liftConditionType,
         liftScoreThreshold: parsed.liftScoreThreshold,
         liftDurationDays: parsed.liftDurationDays,
-        // Changer le seuil redefinit le franchissement : l'armement est
-        // recalcule pour eviter de proposer une sanction sur un seuil obsolete.
-        ...(thresholdChanged
-          ? { armed: initialArmedState(score, parsed.threshold, parsed.comparator) }
-          : {}),
+        // Changer le seuil redefinit ce qu'est un franchissement : la regle est
+        // rearmee, et l'evaluation qui suit decide s'il faut proposer.
+        ...(thresholdChanged ? { armed: INITIAL_ARMED_STATE } : {}),
       },
     });
 

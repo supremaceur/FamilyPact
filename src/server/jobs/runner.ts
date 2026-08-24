@@ -55,6 +55,17 @@ const withJobLock = async (
   runKey: string,
   execute: () => Promise<number>,
 ): Promise<JobResult> => {
+  // Verification prealable : le creneau deja traite est le cas NOMINAL d'un
+  // ordonnanceur qui declenche plusieurs fois. On l'ecarte par une lecture,
+  // pour ne pas transformer un fonctionnement normal en erreur journalisee.
+  const alreadyRun = await prisma.jobRun.findUnique({
+    where: { jobName_runKey: { jobName: job, runKey } },
+    select: { id: true },
+  });
+  if (alreadyRun !== null) {
+    return { job, status: 'SKIPPED_ALREADY_RUN', itemsProcessed: 0 };
+  }
+
   let runId: string;
   try {
     const run = await prisma.jobRun.create({
@@ -63,6 +74,8 @@ const withJobLock = async (
     });
     runId = run.id;
   } catch (error) {
+    // La contrainte unique reste la garantie ultime : elle tranche la course
+    // entre deux executions simultanees du meme creneau.
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === UNIQUE_VIOLATION) {
       return { job, status: 'SKIPPED_ALREADY_RUN', itemsProcessed: 0 };
     }

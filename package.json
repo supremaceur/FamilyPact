@@ -20,8 +20,8 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:reset": "prisma migrate reset --force",
     "db:studio": "prisma studio",
-    "db:seed": "tsx prisma/seed.ts",
-    "jobs:run": "tsx scripts/run-jobs.ts",
+    "db:seed": "tsx --conditions=react-server prisma/seed.ts",
+    "jobs:run": "tsx --conditions=react-server scripts/run-jobs.ts",
     "test": "vitest run --project unit",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
@@ -32,7 +32,7 @@
     "verify": "npm run format:check && npm run lint && npm run typecheck && npm run test:all"
   },
   "prisma": {
-    "seed": "tsx prisma/seed.ts"
+    "seed": "tsx --conditions=react-server prisma/seed.ts"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.1.0",
