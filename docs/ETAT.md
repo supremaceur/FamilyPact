@@ -4,7 +4,7 @@
 > Il existe pour éviter de reparcourir le code afin de reconstruire un contexte
 > déjà écrit.
 
-**Dernière mise à jour** : 24 août 2026
+**Dernière mise à jour** : 24 août 2026, 21 h
 
 ## En production
 
@@ -20,6 +20,7 @@
 
 | Domaine                                                           | État |
 | ----------------------------------------------------------------- | ---- |
+| Documentation vivante : `ETAT.md`, `DECISIONS.md`, `interface.md` | ✅   |
 | Comptes parents, MFA TOTP obligatoire, codes de secours, passkeys | ✅   |
 | Familles, adhésions, invitations, rôles et capacités              | ✅   |
 | Tâches, récurrence, occurrences, registre de points, score        | ✅   |
@@ -31,11 +32,18 @@
 
 ## En cours
 
-**PR #5 — second type de refus** (`claude/refus-avec-retrait`)
+**PR #5 — second type de refus** (`claude/refus-avec-retrait`) — prête à fusionner
 
-Deux refus au lieu d'un : sans effet sur les points, ou assorti du retrait déjà
-configuré sur la tâche. Inclut la chronologie unifiée des historiques et une
-correction du registre. Tout est vert ; reste la documentation avant fusion.
+Trois choses liées dans la même livraison :
+
+1. **Deux refus au lieu d'un** : sans effet sur les points, ou assorti du retrait
+   déjà configuré sur la tâche. Le parent ne saisit aucun montant.
+2. **Chronologie unifiée** : les écrans d'historique ne lisaient que le registre,
+   donc un refus sans retrait n'apparaissait nulle part.
+3. **Correction du registre** : le rattrapage après violation d'unicité
+   interrogeait une transaction déjà avortée par PostgreSQL (`25P02`). Défaut
+   préexistant, rendu atteignable par le refus avec retrait, trouvé par le test
+   d'intégration. Voir `DECISIONS.md` D-007.
 
 ## Défauts connus
 
@@ -43,10 +51,11 @@ Aucun défaut ouvert à ce jour.
 
 ## Demandes en attente
 
-| Demande                                    | Note                                                                                                                                                   |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Rafraîchissement périodique de l'interface | Choix retenu : interrogation périodique (`router.refresh()` toutes les 15–20 s + au retour de focus). **Pas** Supabase Realtime — voir `DECISIONS.md`. |
-| Révocation d'une récompense accordée       | Quand le score repasse sous le seuil qui l'avait déclenchée. Proposition, jamais automatique.                                                          |
+| Demande                                    | Note                                                                                                                                                                                   |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Rafraîchissement périodique de l'interface | Choix retenu : interrogation périodique (`router.refresh()` toutes les 15–20 s + au retour de focus). **Pas** Supabase Realtime — voir `DECISIONS.md`.                                 |
+| Révocation d'une récompense accordée       | Quand le score repasse sous le seuil qui l'avait déclenchée. Proposition, jamais automatique.                                                                                          |
+| Habillage visuel des écrans                | Très sobre, et vide sur grand écran : le contenu reste dans une colonne étroite centrée. Direction souhaitée : sobre, tech/futuriste. Propositions à valider avant toute modification. |
 
 ## Points d'attention
 
