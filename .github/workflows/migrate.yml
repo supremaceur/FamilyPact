@@ -1,0 +1,81 @@
+name: Migrations
+
+# Applique les migrations Prisma a une base distante.
+#
+# Ce workflow existe parce que le projet se pilote entierement depuis GitHub,
+# sans poste de travail local : c'est ici que l'on execute `prisma migrate
+# deploy`, avec les identifiants stockes en secrets de depot.
+#
+# Le declenchement est MANUEL et jamais automatique. Une migration appliquee
+# par surprise a la fusion d'une PR est une facon fiable de casser une base en
+# production : c'est une decision, elle doit etre prise explicitement.
+on:
+  workflow_dispatch:
+    inputs:
+      environnement:
+        description: Base cible
+        required: true
+        default: production
+        type: choice
+        options:
+          - production
+      confirmation:
+        description: Tapez MIGRER pour confirmer
+        required: true
+        type: string
+
+jobs:
+  migrate:
+    name: Appliquer les migrations
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environnement }}
+    steps:
+      - name: Verifier la confirmation
+        if: inputs.confirmation != 'MIGRER'
+        run: |
+          echo "::error::Confirmation absente ou incorrecte. Tapez exactement MIGRER."
+          exit 1
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Verifier que le secret est configure
+        env:
+          DIRECT_DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
+        run: |
+          if [ -z "$DIRECT_DATABASE_URL" ]; then
+            echo "::error::Le secret DIRECT_DATABASE_URL est absent."
+            echo "Ajoutez-le dans Settings > Secrets and variables > Actions."
+            echo "Il doit pointer le port 5432 (connexion directe) : le pooler"
+            echo "transactionnel de Supabase ne supporte pas le DDL."
+            exit 1
+          fi
+
+      - name: Etat des migrations avant application
+        env:
+          DIRECT_DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
+        run: npx prisma migrate status || true
+
+      - name: Appliquer les migrations
+        env:
+          DIRECT_DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
+        run: npx prisma migrate deploy
+
+      - name: Etat des migrations apres application
+        env:
+          DIRECT_DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
+        run: npx prisma migrate status
+
+      # Une migration qui ajoute une table doit la refermer aussitot : Supabase
+      # expose par defaut le schema public via PostgREST, et la cle anon est
+      # publique par conception. Voir docs/deployment.md.
+      - name: Verifier que la surface REST reste fermee
+        env:
+          DIRECT_DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
+        run: npx tsx --conditions=react-server scripts/check-rest-surface.ts

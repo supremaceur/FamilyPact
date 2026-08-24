@@ -1,0 +1,195 @@
+@import 'tailwindcss';
+
+/*
+ * FamiliPact — systeme visuel.
+ *
+ * Positionnement : application familiale premium, calme et rassurante.
+ * Explicitement PAS un jeu : pas de couleurs saturees, pas de confettis, pas de
+ * badges. La progression se lit dans une barre sobre, pas dans une mecanique de
+ * recompense visuelle.
+ *
+ * La palette est definie en OKLCH : la luminosite y est perceptuellement
+ * uniforme, ce qui permet de garantir les contrastes AA sans tatonner.
+ */
+
+@theme {
+  /* Teal profond : couleur du « pacte ». Calme, ni institutionnel ni ludique. */
+  --color-pact-50: oklch(0.972 0.014 180);
+  --color-pact-100: oklch(0.94 0.028 180);
+  --color-pact-200: oklch(0.88 0.05 180);
+  --color-pact-300: oklch(0.8 0.07 179);
+  --color-pact-400: oklch(0.7 0.085 178);
+  --color-pact-500: oklch(0.6 0.09 177);
+  --color-pact-600: oklch(0.52 0.086 176);
+  --color-pact-700: oklch(0.44 0.072 176);
+  --color-pact-800: oklch(0.36 0.055 176);
+  --color-pact-900: oklch(0.28 0.04 177);
+  --color-pact-950: oklch(0.2 0.03 178);
+
+  /* Sable chaud : fonds et surfaces. Evite la froideur d'un gris pur. */
+  --color-sand-50: oklch(0.987 0.004 85);
+  --color-sand-100: oklch(0.968 0.007 85);
+  --color-sand-200: oklch(0.925 0.011 84);
+  --color-sand-300: oklch(0.868 0.014 83);
+  --color-sand-400: oklch(0.74 0.016 82);
+  --color-sand-500: oklch(0.62 0.016 82);
+  --color-sand-600: oklch(0.5 0.015 82);
+  --color-sand-700: oklch(0.4 0.013 83);
+  --color-sand-800: oklch(0.3 0.011 84);
+  --color-sand-900: oklch(0.22 0.009 85);
+  --color-sand-950: oklch(0.16 0.008 86);
+
+  /* Ambre : attention, decision attendue. Chaud sans etre alarmant. */
+  --color-amber-soft-50: oklch(0.975 0.017 80);
+  --color-amber-soft-100: oklch(0.945 0.04 80);
+  --color-amber-soft-200: oklch(0.9 0.07 78);
+  --color-amber-soft-500: oklch(0.72 0.115 70);
+  --color-amber-soft-700: oklch(0.55 0.1 62);
+  --color-amber-soft-900: oklch(0.37 0.07 60);
+
+  /* Terre cuite : retraits et suppressions. Delibere : pas de rouge vif. */
+  --color-clay-50: oklch(0.972 0.014 28);
+  --color-clay-100: oklch(0.94 0.03 28);
+  --color-clay-200: oklch(0.89 0.05 27);
+  --color-clay-500: oklch(0.62 0.14 27);
+  --color-clay-600: oklch(0.55 0.14 27);
+  --color-clay-700: oklch(0.46 0.12 27);
+  --color-clay-900: oklch(0.32 0.08 27);
+
+  /* Vert d'eau : validations et gains. */
+  --color-leaf-50: oklch(0.972 0.017 150);
+  --color-leaf-100: oklch(0.94 0.04 150);
+  --color-leaf-200: oklch(0.89 0.06 150);
+  --color-leaf-600: oklch(0.55 0.11 150);
+  --color-leaf-700: oklch(0.46 0.095 150);
+  --color-leaf-900: oklch(0.32 0.06 150);
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    'Noto Sans', sans-serif;
+  --font-numeric: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
+
+  --radius-card: 1rem;
+  --radius-control: 0.625rem;
+
+  --shadow-soft: 0 1px 2px oklch(0.2 0.02 85 / 0.05), 0 4px 16px oklch(0.2 0.02 85 / 0.06);
+  --shadow-lifted: 0 2px 4px oklch(0.2 0.02 85 / 0.06), 0 12px 32px oklch(0.2 0.02 85 / 0.1);
+}
+
+@layer base {
+  :root {
+    --surface: var(--color-sand-50);
+    --surface-raised: white;
+    --surface-sunken: var(--color-sand-100);
+    --border-subtle: var(--color-sand-200);
+    --border-strong: var(--color-sand-300);
+    --text-primary: var(--color-sand-900);
+    --text-secondary: var(--color-sand-700);
+    --text-muted: var(--color-sand-600);
+    --accent: var(--color-pact-600);
+    --accent-contrast: white;
+    color-scheme: light;
+  }
+
+  /*
+   * Le theme sombre suit la preference systeme. Il n'est pas un simple
+   * inversement : les surfaces restent legerement chaudes pour conserver
+   * l'identite, et les couleurs d'accent sont eclaircies pour rester lisibles.
+   */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --surface: var(--color-sand-950);
+      --surface-raised: var(--color-sand-900);
+      --surface-sunken: oklch(0.13 0.008 86);
+      --border-subtle: oklch(0.28 0.01 85);
+      --border-strong: oklch(0.36 0.012 85);
+      --text-primary: var(--color-sand-100);
+      --text-secondary: var(--color-sand-300);
+      --text-muted: var(--color-sand-400);
+      --accent: var(--color-pact-400);
+      --accent-contrast: var(--color-sand-950);
+      color-scheme: dark;
+    }
+  }
+
+  html {
+    /* Evite le zoom automatique de Safari iOS sur les champs de formulaire. */
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--surface);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    /* Zone sure des ecrans a encoche, en mode standalone. */
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    overscroll-behavior-y: none;
+  }
+
+  /*
+   * Focus toujours visible : c'est la condition d'utilisabilite au clavier.
+   * On ne le supprime jamais, on le rend simplement coherent.
+   */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Respecte le reglage systeme de reduction des animations. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /* Chiffres alignes : un score qui change ne fait pas sautiller la mise en page. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum';
+  }
+
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--surface-sunken) 25%,
+      var(--border-subtle) 37%,
+      var(--surface-sunken) 63%
+    );
+    background-size: 400% 100%;
+    animation: familipact-shimmer 1.4s ease infinite;
+  }
+
+  @keyframes familipact-shimmer {
+    0% {
+      background-position: 100% 50%;
+    }
+    100% {
+      background-position: 0 50%;
+    }
+  }
+}
+
+/* Lien d'evitement : premier element focalisable de chaque page. */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+}
+.skip-link:focus {
+  left: 0.5rem;
+  top: 0.5rem;
+  padding: 0.625rem 1rem;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+}
