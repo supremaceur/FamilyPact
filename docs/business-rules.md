@@ -73,18 +73,44 @@ depuis passée à +5.
                   ▼      ▼             ▼          ▼
           ┌──────────┐ ┌──────────┐ ┌──────────────────┐ ┌─────────────────┐
           │ APPROVED │ │ REJECTED │ │ MISSED_CONFIRMED │ │ MISSED_IGNORED  │
-          │  +points │ │  0 point │ │     −points      │ │    0 point      │
+          │  +points │ │ 0 ou −N  │ │     −points      │ │    0 point      │
           └──────────┘ └────┬─────┘ └──────────────────┘ └─────────────────┘
                             │
                    re-déclarable ou détectable comme manquée
 ```
 
-**Deux transitions seulement écrivent au ledger**, et toutes deux exigent une décision
-parentale :
+**Le refus se décline en deux**, et les deux mènent au même état. La tâche
+redevient « à faire » dans les deux cas ; seule l'écriture au ledger les
+distingue :
+
+| Action                | Effet sur les points     | État       |
+| --------------------- | ------------------------ | ---------- |
+| `REJECT`              | aucun                    | `REJECTED` |
+| `REJECT_WITH_PENALTY` | `−pointsPenaltySnapshot` | `REJECTED` |
+
+Le parent ne saisit **aucun montant** : le retrait est celui configuré sur la
+tâche, convenu en famille au moment de la créer. L'application ne propose donc
+rien de nouveau, elle rend applicable une conséquence déjà écrite. L'interface
+n'offre le second bouton que si `pointsPenalty > 0`.
+
+Le mouvement porte le type `TASK_REJECTED`, distinct de `TASK_MISSED` : un refus
+n'est pas une échéance laissée passer. La distinction garde l'historique lisible
+et rend les deux retraits indépendants vis-à-vis de l'index unique
+`(sourceType, sourceId, type)` — une même occurrence peut connaître un refus
+puis, plus tard, une échéance dépassée.
+
+**Le retrait ne s'applique qu'une fois par occurrence.** Si l'enfant redéclare la
+tâche et se fait refuser à nouveau avec retrait, la seconde écriture est rejetée
+par l'index unique. Ce n'est pas une vérification applicative qu'on pourrait
+oublier : c'est une contrainte de la base.
+
+**Trois transitions seulement écrivent au ledger**, et toutes trois exigent une
+décision parentale :
 
 | Transition                                 | Effet                    | Permission requise    |
 | ------------------------------------------ | ------------------------ | --------------------- |
 | `CLAIMED_DONE → APPROVED`                  | `+pointsAwardSnapshot`   | `TASK_APPROVE`        |
+| `CLAIMED_DONE → REJECTED` (avec retrait)   | `−pointsPenaltySnapshot` | `TASK_APPROVE`        |
 | `MISSED_PENDING_REVIEW → MISSED_CONFIRMED` | `−pointsPenaltySnapshot` | `TASK_CONFIRM_MISSED` |
 
 Aucune autre transition ne touche au score. Une tâche qui vaut 0 point n'écrit rien.
@@ -128,6 +154,33 @@ recalculable à tout moment.
 | `label`, `reason`         | Motif **obligatoire** pour les corrections                            |
 | `approvedById`            | Le parent qui a décidé                                                |
 | `reversesTransactionId`   | Renseigné pour une annulation                                         |
+
+### Ce que montre l'historique
+
+Le ledger ne contient, par construction, que ce qui a **bougé**. Un refus sans
+retrait, une échéance ignorée : ce sont de vraies décisions parentales qui n'y
+écrivent rien. Les lire uniquement là rendait ces décisions invisibles, alors
+qu'elles sont précisément ce qu'un parent vient vérifier après avoir décidé.
+
+`getFamilyTimeline` fusionne donc deux sources en un seul fil chronologique :
+
+| Source             | Ce qu'elle apporte                                                                                     |
+| ------------------ | ------------------------------------------------------------------------------------------------------ |
+| `PointTransaction` | Tous les mouvements de points                                                                          |
+| `AuditLog`         | Les décisions qui, par construction, n'écrivent pas au ledger : `TASK_REJECTED`, `TASK_MISSED_IGNORED` |
+
+Les validations et les échéances confirmées ne sont **pas** reprises depuis
+l'audit : elles figurent déjà via leur mouvement, et les reprendre les
+afficherait deux fois.
+
+La pagination traverse deux tables. Un curseur sur le seul horodatage perdrait
+ou dupliquerait une entrée dès que deux événements partagent la même
+milliseconde — ce qui arrive chaque fois qu'une décision écrit simultanément au
+ledger et à l'audit. Le curseur porte donc la paire ordonnée `(createdAt, id)`,
+qui est strictement totale.
+
+Un enfant ne voit que sa propre chronologie : la portée est décidée côté
+serveur, jamais par l'appelant.
 
 ### Le score n'est pas borné à zéro
 
@@ -376,15 +429,16 @@ inactif ni aucune amorce de ces fonctionnalités n'a été laissé dans le dép�
 
 ## 8. Correspondance avec les cas exigés
 
-| Cas | Scénario                                                   | Vérifié par                                 |
-| --- | ---------------------------------------------------------- | ------------------------------------------- |
-| A   | 100 pts, tâche +20 validée → 120, une transaction          | `ledger-and-tasks.test.ts`                  |
-| B   | Deux parents valident simultanément → +20 une fois         | `ledger-and-tasks.test.ts` (2 et 4 parents) |
-| C   | Échéance −10 dépassée → aucun retrait ; confirmation → −10 | `ledger-and-tasks.test.ts`                  |
-| D   | Échéance dépassée puis « Ignorer » → aucune transaction    | `ledger-and-tasks.test.ts`                  |
-| E   | Palier 500, 490 → 510 : proposition, puis validation       | `rules-engine.test.ts`                      |
-| F   | Score 510 → 480 → 510 : pas de reproposition               | `rules-engine.test.ts`                      |
-| G   | Seuil < 100, score 105 → 95 : proposition, rien d'actif    | `rules-engine.test.ts`                      |
-| H   | Levée à 150 atteinte : éligible, puis levée par le parent  | `rules-engine.test.ts`                      |
-| I   | Jeton réutilisé → refus (dont 5 tentatives simultanées)    | `isolation-and-invitations.test.ts`         |
-| J   | Famille A → ressource de Famille B → refus serveur         | `isolation-and-invitations.test.ts`         |
+| Cas | Scénario                                                                                  | Vérifié par                                 |
+| --- | ----------------------------------------------------------------------------------------- | ------------------------------------------- |
+| A   | 100 pts, tâche +20 validée → 120, une transaction                                         | `ledger-and-tasks.test.ts`                  |
+| B   | Deux parents valident simultanément → +20 une fois                                        | `ledger-and-tasks.test.ts` (2 et 4 parents) |
+| C   | Échéance −10 dépassée → aucun retrait ; confirmation → −10                                | `ledger-and-tasks.test.ts`                  |
+| D   | Échéance dépassée puis « Ignorer » → aucune transaction                                   | `ledger-and-tasks.test.ts`                  |
+| E   | Palier 500, 490 → 510 : proposition, puis validation                                      | `rules-engine.test.ts`                      |
+| F   | Score 510 → 480 → 510 : pas de reproposition                                              | `rules-engine.test.ts`                      |
+| G   | Seuil < 100, score 105 → 95 : proposition, rien d'actif                                   | `rules-engine.test.ts`                      |
+| H   | Levée à 150 atteinte : éligible, puis levée par le parent                                 | `rules-engine.test.ts`                      |
+| I   | Jeton réutilisé → refus (dont 5 tentatives simultanées)                                   | `isolation-and-invitations.test.ts`         |
+| J   | Famille A → ressource de Famille B → refus serveur                                        | `isolation-and-invitations.test.ts`         |
+| K   | Refus sans retrait visible dans l'historique ; refus avec retrait appliqué une seule fois | `ledger-and-tasks.test.ts`                  |
