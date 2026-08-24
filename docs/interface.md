@@ -64,6 +64,47 @@ le code indéchiffrable.
 faire sauter la mise en page, et un code à six chiffres se relit mieux à
 chasse fixe.
 
+## Largeur : une seule source
+
+Vingt-deux pages codaient chacune sa largeur en dur. Sur un grand écran, le
+contenu tenait dans un couloir de 390 px au milieu de 2000 — et corriger cela
+demandait de retrouver vingt-deux valeurs. `PageBody` centralise le choix :
+
+| Largeur         | Valeur          | Pour                                          |
+| --------------- | --------------- | --------------------------------------------- |
+| `lecture`       | `max-w-2xl`     | Formulaires, réglages, texte suivi            |
+| `liste`         | `max-w-4xl`     | Listes et historiques                         |
+| `tableauDeBord` | `max-w-[84rem]` | Les seules pages qui répartissent en colonnes |
+
+**Élargir n'est pas la réponse partout.** Un formulaire étalé sur 1600 px se lit
+plus mal, pas mieux : au-delà d'environ 75 caractères, l'œil perd la ligne
+suivante. Seuls les tableaux de bord prennent toute la largeur, parce qu'ils
+répartissent l'information au lieu de l'empiler.
+
+`DashboardGrid` passe à deux colonnes à partir de `xl` : ce qui appelle une
+décision à gauche, le contexte à droite. En dessous, une seule colonne — l'ordre
+du DOM est donc aussi l'ordre de lecture au clavier et au lecteur d'écran.
+
+## Le relief : direction « Ardoise »
+
+Les surfaces sont posées sur le fond, pas découpées dedans. Trois moyens, tous
+portés par des jetons :
+
+| Jeton            | Effet                                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------------ |
+| `--app-backdrop` | Deux halos très faibles sur le fond de page, teintés vers le teal du pacte plutôt que vers un gris pur |
+| `--card-surface` | Un dégradé très court sur les cartes, au lieu d'un aplat                                               |
+| `--card-inset`   | Un filet clair d'un pixel en haut de chaque carte                                                      |
+
+`<Card tone="lead">` ajoute un liseré teal et une ombre plus marquée. Il désigne
+**la** carte qui attend une décision : sur un tableau de bord où tout se
+ressemble, l'œil doit trouver sans lire.
+
+Deux règles à tenir : **une seule carte `lead` par écran** — deux accents ne
+désignent plus rien — et le liseré ne s'allume que s'il y a effectivement
+quelque chose à décider. Un accent permanent cesse d'attirer l'œil au bout d'un
+jour.
+
 ## Mobile d'abord
 
 - **Tout doit tenir en 320 px de large.** C'est la contrainte réelle, pas 375.

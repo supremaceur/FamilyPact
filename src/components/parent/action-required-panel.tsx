@@ -56,7 +56,9 @@ const ROWS: readonly {
 ];
 
 export const ActionRequiredPanel = ({ counts }: { readonly counts: ActionRequiredCountsView }) => (
-  <Card>
+  // Le lisere teal ne s'allume que s'il y a effectivement une decision a
+  // prendre : un accent permanent cesse d'attirer l'oeil au bout d'un jour.
+  <Card tone={counts.total > 0 ? 'lead' : 'default'}>
     <CardHeader
       title="Actions requises"
       description={

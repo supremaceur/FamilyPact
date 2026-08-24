@@ -1,15 +1,34 @@
 import type { HTMLAttributes, ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 
+/**
+ * Carte.
+ *
+ * `tone="lead"` designe la carte qui attend une decision. Elle recoit un
+ * lisere teal et une ombre plus marquee : sur un tableau de bord ou tout se
+ * ressemble, l'oeil doit trouver sans lire. Une seule carte par ecran devrait
+ * le porter — deux accents ne designent plus rien.
+ *
+ * La surface est un degrade tres court plutot qu'un aplat, avec un filet clair
+ * en haut (`--card-inset`). C'est ce qui pose la carte sur le fond au lieu de
+ * l'y decouper.
+ */
 export const Card = ({
+  tone = 'default',
   className,
   children,
   ...rest
-}: HTMLAttributes<HTMLDivElement> & { readonly children: ReactNode }) => (
+}: HTMLAttributes<HTMLDivElement> & {
+  readonly tone?: 'default' | 'lead';
+  readonly children: ReactNode;
+}) => (
   <div
     className={cn(
-      'rounded-[var(--radius-card)] border border-[var(--border-subtle)]',
-      'bg-[var(--surface-raised)] shadow-[var(--shadow-soft)]',
+      'rounded-[var(--radius-card)] border',
+      'bg-[image:var(--card-surface)]',
+      tone === 'lead'
+        ? 'border-[var(--lead-ring)] shadow-[var(--card-inset),var(--lead-glow)]'
+        : 'border-[var(--border-subtle)] shadow-[var(--card-inset),var(--shadow-soft)]',
       className,
     )}
     {...rest}

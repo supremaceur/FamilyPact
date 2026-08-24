@@ -83,6 +83,14 @@
     --surface-sunken: var(--color-sand-100);
     --border-subtle: var(--color-sand-200);
     --border-strong: var(--color-sand-300);
+
+    --app-backdrop:
+      radial-gradient(120% 80% at 18% -8%, oklch(0.965 0.012 178) 0%, transparent 60%),
+      radial-gradient(90% 70% at 100% 0%, oklch(0.975 0.006 85) 0%, transparent 55%);
+    --card-surface: linear-gradient(180deg, oklch(1 0 0) 0%, oklch(0.985 0.003 85) 100%);
+    --card-inset: inset 0 1px 0 oklch(1 0 0 / 0.8);
+    --lead-ring: var(--color-pact-300);
+    --lead-glow: 0 0 0 1px var(--color-pact-200), 0 12px 28px oklch(0.5 0.05 177 / 0.14);
     --text-primary: var(--color-sand-900);
     --text-secondary: var(--color-sand-700);
     --text-muted: var(--color-sand-600);
@@ -109,6 +117,19 @@
       --accent: var(--color-pact-400);
       --accent-contrast: var(--color-sand-950);
       color-scheme: dark;
+
+      /*
+       * ARDOISE, en sombre : le relief se voit, donc il travaille. Le degrade
+       * de fond est teinte vers le teal du pacte plutot que vers un gris pur —
+       * un halo froid trahirait une couleur non choisie.
+       */
+      --app-backdrop:
+        radial-gradient(120% 80% at 18% -8%, oklch(0.22 0.028 178) 0%, transparent 62%),
+        radial-gradient(90% 70% at 100% 0%, oklch(0.19 0.016 86) 0%, transparent 55%);
+      --card-surface: linear-gradient(180deg, oklch(0.225 0.009 85) 0%, oklch(0.195 0.008 86) 100%);
+      --card-inset: inset 0 1px 0 oklch(1 0 0 / 0.035);
+      --lead-ring: oklch(0.38 0.05 177);
+      --lead-glow: 0 0 0 1px oklch(0.3 0.04 177), 0 14px 34px oklch(0 0 0 / 0.4);
     }
   }
 
@@ -119,6 +140,13 @@
 
   body {
     background-color: var(--surface);
+    /*
+     * ARDOISE — le fond n'est pas plat. Deux halos tres faibles donnent une
+     * profondeur sur laquelle les surfaces peuvent se poser. `background-color`
+     * reste declaree : le degrade se superpose, il ne remplace pas le fond.
+     */
+    background-image: var(--app-backdrop);
+    background-attachment: fixed;
     color: var(--text-primary);
     font-family: var(--font-sans);
     /* Zone sure des ecrans a encoche, en mode standalone. */
